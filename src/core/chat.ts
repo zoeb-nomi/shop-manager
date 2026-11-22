@@ -31,7 +31,7 @@ export function buildChatRequest(u: User, message: string) {
   const state = JSON.stringify({
     piece: p.product ? shortTitle(p.product.title) : null,
     price_rs: p.product?.price ?? null,
-    has_plan: Boolean(u.flow?.plan),
+    plan_given: u.flow?.plan?.text.replace(/\s+/g, ' ').slice(0, 600) ?? null, // code's channels and timings
     posts_made: Boolean(u.flow?.pack),
     posted_on_instagram: Boolean(u.flow?.pack?.instagram?.postId || u.flow?.pack?.instagram?.url),
   });
