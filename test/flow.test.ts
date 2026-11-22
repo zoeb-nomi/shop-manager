@@ -414,3 +414,16 @@ test('fix: a second "Post to Instagram" tap says "Already posted ✅" with the l
   const r = await tap(u, 'post_instagram');
   assert.equal(textOf(last(r)), 'Already posted ✅ https://www.instagram.com/p/TEST/');
 });
+
+test('fix: /report counts clicks across all of the owner\'s packs', async () => {
+  const { recordClick } = await import('../src/core/links.ts');
+  const u = newUser();
+  const first = await packFor(u);
+  await recordClick(first.status, { ua: PHONE, ip: '10.9.0.1', method: 'GET' });
+  await tap(u, 'do_it_for_me'); // a second pack for the same piece: new links
+  const second = db().users[u].flow.pack.codes as Record<string, string>;
+  assert.notEqual(second.status, first.status);
+  await recordClick(second.story, { ua: PHONE, ip: '10.9.0.2', method: 'GET' });
+  const r = await say(u, '/report');
+  assert.match(textOf(last(r)), /Status: 1 click, groups: 0, Insta: 1\./);
+});

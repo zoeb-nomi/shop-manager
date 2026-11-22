@@ -5,7 +5,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import type { User } from './db.ts';
-import { countClicks, type Counts } from './links.ts';
+import { countClicksForUser, type Counts } from './links.ts';
 import { shortTitle } from './products.ts';
 import type { Reply } from './types.ts';
 
@@ -90,15 +90,17 @@ export type Report = { replies: Reply[]; total: number; best?: Channel };
 export async function buildReport(u: User): Promise<Report> {
   const pack = u.flow?.pack;
   const product = u.profile.product;
-  if (!pack?.codes || !Object.keys(pack.codes).length || !product) {
+  // Clicks count across all of this owner's packs, not only the latest one.
+  const mine = countClicksForUser(u.userId);
+  if (!mine.links || !product) {
     const text = pack
       ? 'These posts have no tracking links (your own photo with no product page), so I cannot count clicks for them.'
       : 'No posts to report on yet. Tap "Let me get it done for you" first, then post them.';
     return { replies: [{ kind: 'text', text }], total: 0 };
   }
-  const ch = byChannel(countClicks(pack.codes));
+  const ch = byChannel(mine.counts);
   const total = ch.status + ch.groups + ch.insta;
-  const name = shortTitle(product.title);
+  const name = mine.slugs.length > 1 ? 'All your posts' : shortTitle(product.title);
   if (!total) {
     return { replies: [{ kind: 'text', text: `${name}: no clicks yet. Post the Status tonight, 7 to 10 PM, and check again tomorrow.` }], total };
   }

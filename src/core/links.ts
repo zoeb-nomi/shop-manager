@@ -79,6 +79,15 @@ export async function recordClick(code: string, meta: ClickMeta): Promise<{ targ
 
 export type Counts = Record<LinkFormat, number>;
 
+// Counted clicks per format across every pack this owner ever made, and which products those links were for.
+export function countClicksForUser(userId: string): { counts: Counts; slugs: string[]; links: number } {
+  const db = readDb();
+  const counts: Counts = { status: 0, group: 0, feed: 0, story: 0 };
+  for (const c of db.clicks ?? []) if (c.userId === userId && c.counted) counts[c.format]++;
+  const mine = Object.values(db.links ?? {}).filter((l) => l.userId === userId);
+  return { counts, slugs: [...new Set(mine.map((l) => l.slug))], links: mine.length };
+}
+
 // Counted clicks per format for the given codes (one pack).
 export function countClicks(codes: Partial<Record<LinkFormat, string>>): Counts {
   const db = readDb();
