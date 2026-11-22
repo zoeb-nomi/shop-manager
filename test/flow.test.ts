@@ -94,7 +94,11 @@ test('"Only my shop" clears the other ticks, and Done with nothing ticked asks a
 
 test('the product pick lists products.json and names the festival with days left', async () => {
   const u = newUser();
-  const r = await onboard(u, ['whatsapp'], 'never', 'no_time');
+  const own = await onboard(u, ['whatsapp'], 'never', 'no_time');
+  // A shop that typed what it sells is asked for its own piece; the Amazon listings are one tap away.
+  assert.match(textOf(last(own)), /Which piece could sell a lot right now\? Send a photo of it, or type its name and price\./);
+  assert.deepEqual(ids(last(own)), ['pick:list']);
+  const r = await tap(u, 'pick:list');
   assert.deepEqual(ids(last(r)).slice(0, 4), [
     'pick:pooja-gold-3colour-sconce', 'pick:golden-bird-sconce', 'pick:outdoor-3up2down-gate-light', 'pick:black-cage-bedside-lamp',
   ]);
@@ -185,7 +189,7 @@ test('golden: "samajh nahi aaya" → one step + "Do it for me" button', async ()
   assert.match(textOf(r[0]), /tap kariye/, 'answers in Hinglish');
   // "Do it for me" fills the rest with free-first defaults and moves on.
   const done = await tap(u, 'do_it_for_me');
-  assert.match(textOf(last(done)), /Which pieces do you have in stock/);
+  assert.match(textOf(last(done)), /Which piece could sell a lot right now/);
 });
 
 test('resumable: /start after a break returns to the open question', async () => {

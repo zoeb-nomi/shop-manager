@@ -49,6 +49,7 @@ export const Q4_OPTIONS: { code: Blocker; label: string }[] = [
 ];
 
 const PICK_Q = 'Which pieces do you have in stock, and which do you think could sell a lot? Tap one.';
+const PICK_OWN_Q = 'Which piece could sell a lot right now? Send a photo of it, or type its name and price.';
 const PHOTO_Q = 'Send a photo of the piece, with one line: what it is and the price.';
 const PHOTO_LINE_Q = 'Nice photo. Now one line: what is it, and the price?';
 
@@ -58,27 +59,28 @@ const HELP_BUTTON: Button = { id: 'do_it_for_me', label: 'Do it for me' };
 
 const buttons = (text: string, b: Button[], edit?: boolean): Reply => ({ kind: 'buttons', text, buttons: b, ...(edit ? { edit } : {}) });
 
-function q2Reply(draft: SellsOn[], edit = false, note?: string): Reply {
+function q2Reply(draft: SellsOn[], edit = false, note?: string, lead = ''): Reply {
   const b = Q2_OPTIONS.map((o) => ({ id: `q2:${o.code}`, label: `${draft.includes(o.code) ? '✅ ' : ''}${o.label}` }));
   b.push({ id: 'q2:done', label: 'Done' });
-  return buttons(`${Q2}\n${note ?? Q2_HINT}`, b, edit);
+  return buttons(`${lead}${Q2}\n${note ?? Q2_HINT}`, b, edit);
 }
 
 const q3Reply = (lead = ''): Reply => buttons(lead + Q3, Q3_OPTIONS.map((o) => ({ id: `q3:${o.code}`, label: o.label })));
 const q4Reply = (lead = ''): Reply => buttons(lead + Q4, Q4_OPTIONS.map((o) => ({ id: `q4:${o.code}`, label: o.label })));
 
 function pickReply(p: ShopProfile, lead = ''): Reply {
-  if (p.productSource === 'photos') return buttons(lead + PHOTO_Q, [{ id: 'pick:list', label: 'Use my Amazon products' }]);
+  // The listing buttons are the Amazon shop's own stock. Any other shop is asked for its own piece.
+  if (p.productSource !== 'amazon') return buttons(lead + PICK_OWN_Q, [{ id: 'pick:list', label: 'Use my Amazon products' }]);
   const b = loadProducts().map((x) => ({ id: `pick:${x.slug}`, label: shortTitle(x.title) }));
   b.push({ id: 'pick:photo', label: "I'll send a photo" });
   return buttons(lead + PICK_Q, b);
 }
 
-function suggestReply(flow: Flow): Reply[] {
-  const s = flow.suggestion;
+function suggestReply(u: User): Reply[] {
+  const s = u.flow?.suggestion;
   const better = s && productBySlug(s.better);
-  const picked = s && productBySlug(s.picked);
-  if (!better || !picked) return [pickReply({})];
+  const picked = u.profile.product; // a listing or the owner's own piece
+  if (!better || !picked) return [pickReply(u.profile)];
   return [buttons('Push the better festival piece first?', [
     { id: `swap:${better.slug}`, label: `Yes, ${shortTitle(better.title)}` },
     { id: 'keep', label: `No, keep ${shortTitle(picked.title)}` },
@@ -95,7 +97,7 @@ function promptFor(u: User, lead = ''): Reply[] {
     case 'q4': return [q4Reply(lead)];
     case 'pick': return [pickReply(u.profile, lead)];
     case 'photo_line': return [{ kind: 'text', text: lead + PHOTO_LINE_Q }];
-    case 'suggest': return suggestReply(flow);
+    case 'suggest': return suggestReply(u);
     case 'plan': return flow.plan ? [buttons(flow.plan.text, [DO_IT_BUTTON])] : [pickReply(u.profile, lead)];
     case 'pack': return [buttons(lead + 'Want me to make the posts again?', [DO_IT_BUTTON])];
   }
@@ -206,7 +208,7 @@ function applyFields(u: User, f: Fields, msg: Inbound, text: string): Outcome {
   }
   if (f.adsBefore) [p.adsBefore, a.q3] = [f.adsBefore, label(Q3_OPTIONS, f.adsBefore)];
   if (f.postingBlocker) [p.postingBlocker, a.q4] = [f.postingBlocker, label(Q4_OPTIONS, f.postingBlocker)];
-  if (f.productSlug) {
+  if (f.productSlug && p.productSource === 'amazon') {
     p.product = productFromListing(f.productSlug);
   } else if (msg.photoPath && (f.product || text)) {
     p.product = { ...ownPhoto(msg.photoPath, f.product ?? text), ...(f.price ? { price: f.price } : {}) };
@@ -283,7 +285,7 @@ function step(t: Turn): Outcome {
           p.answers.q1 += `, ${city}`;
           flow.step = 'q2';
           flow.q2Draft = [];
-          return { replies: [q2Reply([], false, `${got}, ${city}.\n\n${Q2_HINT}`)] };
+          return { replies: [q2Reply([], false, undefined, `${got}, ${city}.\n\n`)] };
         }
         flow.step = 'q1_city';
         return { replies: [{ kind: 'text', text: `${got}. ${Q1_CITY}` }] };
@@ -304,7 +306,7 @@ function step(t: Turn): Outcome {
       if (nextMissing(p) !== 'q2') return goNext(u, `Got it: ${sells}, ${city}. `);
       flow.step = 'q2';
       flow.q2Draft = [];
-      return { replies: [q2Reply([], false, `Got it: ${sells}, ${city}.\n\n${Q2_HINT}`)] };
+      return { replies: [q2Reply([], false, undefined, `Got it: ${sells}, ${city}.\n\n`)] };
     }
 
     case 'q1_city': {
@@ -314,7 +316,7 @@ function step(t: Turn): Outcome {
       if (nextMissing(p) !== 'q2') return goNext(u, `Got it: ${p.sells ?? 'your shop'}, ${p.city}. `);
       flow.step = 'q2';
       flow.q2Draft = [];
-      return { replies: [q2Reply([], false, `Got it: ${p.sells ?? 'your shop'}, ${p.city}.\n\n${Q2_HINT}`)] };
+      return { replies: [q2Reply([], false, undefined, `Got it: ${p.sells ?? 'your shop'}, ${p.city}.\n\n`)] };
     }
 
     case 'q2': {
@@ -376,6 +378,7 @@ function step(t: Turn): Outcome {
       if (btn.startsWith('pick:')) {
         const product = productFromListing(btn.slice(5));
         if (!product) return { replies: promptFor(u) };
+        p.productSource = 'amazon'; // they tapped one of the listings
         return choose(u, product);
       }
       if (msg.photoPath) {
@@ -477,9 +480,10 @@ function ownPhoto(photoPath: string, line: string): PickedProduct {
 function choose(u: User, product: PickedProduct): Outcome {
   const flow = u.flow!;
   u.profile.product = product;
-  const listings = loadProducts();
+  const listings = u.profile.productSource === 'amazon' ? loadProducts() : [];
   const verdict = judgePick(product.title, listings.map((x) => x.title));
   const name = shortTitle(product.title);
+  const Name = name.charAt(0).toUpperCase() + name.slice(1);
   const picture: Reply[] = product.image ? [{ kind: 'image', path: product.image, caption: name }] : [];
 
   if (verdict.kind === 'suggest') {
@@ -487,13 +491,13 @@ function choose(u: User, product: PickedProduct): Outcome {
     flow.step = 'suggest';
     flow.suggestion = { picked: product.slug, better: better.slug };
     const text =
-      `${name} sells all year, so it can wait. ${phrase(verdict.timing)}, and ${verdict.timing.festival.why}. ` +
+      `${Name} sells all year, so it can wait. ${phrase(verdict.timing)}, and ${verdict.timing.festival.why}. ` +
       `Your ${shortTitle(better.title)} is the better piece to push now.`;
-    return { replies: [...picture, { kind: 'text', text }, ...suggestReply(flow)] };
+    return { replies: [...picture, { kind: 'text', text }, ...suggestReply(u)] };
   }
   const why = verdict.timing
     ? `Good pick. ${phrase(verdict.timing)}, and ${verdict.timing.festival.why}. Your ${name} fits that.`
-    : `Good pick. ${name} sells all year.`;
+    : `Good pick. ${Name} sells all year.`;
   return planOrPack(u, [...picture, { kind: 'text', text: why }]);
 }
 
@@ -531,7 +535,11 @@ function doItForMe(u: User): Outcome {
     flow.step = 'pick';
     return { replies: [pickReply(p, 'Done: free channels first, no ads, I make the posts.\n\n')] };
   }
-  if (!p.product || flow.step === 'pick' || flow.step === 'photo_line' || flow.step === 'suggest') {
+  if (!p.product && p.productSource !== 'amazon') {
+    flow.step = 'pick';
+    return { replies: [pickReply(p, 'I need just one thing from you. ')] };
+  }
+  if (!p.product || (p.productSource === 'amazon' && (flow.step === 'pick' || flow.step === 'photo_line' || flow.step === 'suggest'))) {
     const listings = loadProducts();
     const best = listings[rankTitles(listings.map((x) => x.title))[0]];
     p.product = productFromListing(best.slug);
@@ -603,14 +611,30 @@ export async function runFlow(msg: Inbound): Promise<Reply[]> {
   }
   // M5: typed text (any language), a voice-note transcript or a photo during onboarding goes to Claude Haiku first.
   let fields: Fields | undefined;
+  let pickChat: Promise<Reply[] | undefined> | undefined;
   const before = readDb().users[msg.userId];
   const onboarding = before?.flow && ['q1', 'q1_city', 'q2', 'q3', 'q4', 'pick', 'photo_line'].includes(before.flow.step);
   const freeForm = !msg.button && ((text && !text.startsWith('/') && !HELP_RE.test(text)) || msg.photoPath);
   if (onboarding && freeForm && understandingOn() && !(before.flow!.step === 'photo_line' && !msg.photoPath)) {
+    // A typed question at the pick ("which one will sell best?") deserves an answer, not "tap a button": ask both at once.
+    if (before.flow!.step === 'pick' && !msg.photoPath && chatOn()) pickChat = chatReply(before, text);
     fields = await understand(before.profile, { text, photoPath: msg.photoPath }, [Q1, Q2, Q3, Q4, PICK_Q].map((q) => q.split('\n').at(-1)!));
     if (fields) console.log(`[understand] ${msg.userId}: ${Object.keys(fields).filter((k) => k !== 'followUp' && k !== 'language').join(', ') || 'nothing new'} (${fields.language ?? '?'})`);
   }
   const useFields = fields && Object.keys(fields).some((k) => k !== 'followUp' && k !== 'language');
+
+  // The model read the message and found no answer in it (a greeting, a question).
+  if (fields && !useFields) {
+    const at = before.flow!.step;
+    if (at === 'q1' || at === 'q1_city') {
+      // Ask again; never guess that "hello" is what they sell.
+      const ask = fields.followUp && FIELD_STEP[fields.followUp.field] === at ? fields.followUp.text : NEXT_STEP[at][0];
+      return at === 'q1' ? [buttons(ask, Q1_BUTTONS)] : [{ kind: 'text', text: ask }];
+    }
+    const said = at === 'pick' ? (await pickChat)?.[0] : undefined;
+    const pick = pickReply(before.profile);
+    if (said && (said.kind === 'text' || said.kind === 'buttons') && pick.kind === 'buttons') return [buttons(said.text, pick.buttons)];
+  }
 
   // After onboarding (plan or posts made): free text or a voice note is a chat, answered by Haiku.
   const afterOnboarding = before?.flow && ['plan', 'pack'].includes(before.flow.step);

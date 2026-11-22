@@ -51,11 +51,11 @@ export async function createLinks(userId: string, slug: string, target: string, 
 
 // Link previews (Telegram, WhatsApp, Facebook...) fetch the URL on their own; those are not people.
 const BOT_UA = /bot|crawler|spider|preview|facebookexternalhit|whatsapp|telegram|slack|discord|twitter|skype|embedly|headless|curl|wget|python|node-fetch|undici/i;
-const REPEAT_MS = 10_000;
+const REPEAT_MS = 3_000; // a double load from one phone; kept short so two people on one Wi-Fi with the same phone both count
 
 export type ClickMeta = { ua?: string; ip?: string; method?: string };
 
-// Logs the click and returns where to send the visitor. Repeats from the same device within 10 s and link
+// Logs the click and returns where to send the visitor. Repeats from the same device within 3 s and link
 // previews are logged but not counted.
 export async function recordClick(code: string, meta: ClickMeta): Promise<{ target: string; link: Link; counted: boolean } | undefined> {
   return updateDb((db) => {

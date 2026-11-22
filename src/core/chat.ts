@@ -6,10 +6,12 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 import type { User } from './db.ts';
-import { shortTitle } from './products.ts';
+import { loadProducts, shortTitle } from './products.ts';
+import { headline, phrase, rankTitles } from './festivals.ts';
 import type { Button, Reply } from './types.ts';
 
 const Schema = z.object({ reply: z.string(), button: z.string().nullable() });
+const LEAK = /\b(STATE|SHOP|OWNER_NOW|LAST_MESSAGES|AVAILABLE_BUTTONS)\b|\b[a-z]+_[a-z_]+\b|\bnull\b|[{}]/;
 export type ChatModel = (req: { model: string; system: string; user: string }) => Promise<unknown>;
 
 const PROMPT_PATH = process.env.CHAT_PROMPT_PATH ?? 'prompts/chat_reply.md';
@@ -28,8 +30,14 @@ export function buildChatRequest(u: User, message: string) {
   const system = md.split(/^System:\s*$/m)[1]?.split(/^User:\s*$/m)[0]?.trim() ?? '';
   const p = u.profile;
   const shop = JSON.stringify({ name: p.shopName ?? null, sells: p.sells ?? null, city: p.city ?? null, sells_on: p.answers?.q2 ?? [], ads_before: p.answers?.q3 ?? null, hardest: p.answers?.q4 ?? null });
+  // What code would recommend, for "which one should I sell?" (only a shop using its Amazon listings has them).
+  const listings = p.productSource === 'amazon' ? loadProducts() : [];
+  const head = headline();
   const state = JSON.stringify({
     piece: p.product ? shortTitle(p.product.title) : null,
+    pieces_to_choose_from: listings.map((x) => shortTitle(x.title)),
+    suggested_piece: listings.length ? shortTitle(listings[rankTitles(listings.map((x) => x.title))[0]].title) : null,
+    festival: head ? phrase(head) : null,
     price_rs: p.product?.price ?? null,
     plan_given: u.flow?.plan?.text.replace(/\s+/g, ' ').slice(0, 600) ?? null, // code's channels and timings
     posts_made: Boolean(u.flow?.pack),
@@ -71,8 +79,15 @@ export async function chatReply(u: User, message: string): Promise<Reply[] | und
   try {
     const parsed = Schema.safeParse(await (override ?? callHaiku)(buildChatRequest(u, message)));
     if (!parsed.success || !parsed.data.reply.trim()) return undefined;
-    // Two sentences at most, whatever the model wrote.
-    const text = parsed.data.reply.trim().split(/(?<=[.?!।])\s+/).slice(0, 2).join(' ').slice(0, 400);
+    // Two sentences at most, whatever the model wrote, and none that leaks the prompt's own labels or field names.
+    const text = parsed.data.reply
+      .trim()
+      .split(/(?<=[.?!।])\s+/)
+      .filter((s) => !LEAK.test(s))
+      .slice(0, 2)
+      .join(' ')
+      .slice(0, 400);
+    if (!text) return undefined;
     const button = availableButtons(u).find((b) => b.id === parsed.data.button);
     return [button ? { kind: 'buttons', text, buttons: [button] } : { kind: 'text', text }];
   } catch (err) {

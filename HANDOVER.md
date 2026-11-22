@@ -58,6 +58,17 @@ Open:
 - `handle()` never throws: one friendly line instead of a raw error; Telegram says it too when a send or download fails.
 - The one real Instagram post went to the account connected in Zernio (`charmed_homes_`), with the gate light poster.
 
+## Demo review (22 Nov, ~16:30): what was wrong and is fixed
+
+Walked both paths on the live bot through /chat (seeded Kashmakash shop; a new saree shop typing Hinglish). Fixed:
+- A greeting or a question at the first question was taken as the answer ("hello" became what the shop sells). Now the bot asks again when the model finds no answer in the message.
+- Every shop was shown Kashmakash's four lights as its own stock and could be told to push the Golden Bird. Now only a shop using its Amazon products (`productSource: 'amazon'`: the Amazon button, a tapped listing, or the seed) sees or is suggested the listings; any other shop is asked for its own piece (photo, or name and price).
+- A typed question at the product pick ("which one will sell best?") is answered by Haiku with code's suggestion (top-ranked piece + festival), with the pick buttons kept.
+- Free chat: replies in the language of the current message, offers a button only when asked for that action, and any sentence that shows prompt labels or field names is dropped in code.
+- Feed caption no longer says "for when you start a page" before the Instagram button. Q2 shows "Got it: …" before the question. Repeat-click window is 3 s (was 10 s) so two people on one Wi-Fi both count.
+
+Not walked live: tapping "Post to Instagram" (the bot is in live mode; it would post for real), and Telegram itself (same handler as /chat; `/nudge` voice note not yet seen on a phone).
+
 ## How to run
 
 ```bash

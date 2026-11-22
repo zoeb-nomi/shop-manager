@@ -100,7 +100,7 @@ export async function makePack(opts: { key: string; profile: ShopProfile; produc
       kind: 'image',
       path: feed,
       caption:
-        (social ? '3. Post this on Instagram and Facebook as a feed post.' : '3. Feed post for Instagram or Facebook, for when you start a page.') +
+        (social ? '3. Post this on Instagram and Facebook as a feed post.' : '3. Feed post for Instagram and Facebook.') +
         (urls.feed ? ` Put this link in the caption (Facebook) or your bio (Instagram): ${urls.feed}` : ''),
     });
     const tags = copy.hashtags.length ? ` Hashtags: ${copy.hashtags.join(' ')}` : '';
