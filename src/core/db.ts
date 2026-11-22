@@ -31,6 +31,7 @@ export type ShopProfile = {
   defaultsUsed?: boolean; // owner tapped "Do it for me" before answering everything
   product?: PickedProduct;
   answeredAt?: string;
+  understood?: string[]; // times a free-form reply filled fields (M5)
 };
 
 // Where the owner is in the conversation, so it resumes after a restart or a page reload.

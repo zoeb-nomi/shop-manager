@@ -8,6 +8,7 @@ import { DEMO_SHOP, demoShopCity, loadProducts, parsePrice, productBySlug, short
 import { judgePick, phrase, rankTitles, bestFit, type FestivalTiming } from './festivals.ts';
 import { coachingPlan, DO_IT_BUTTON, PHOTO_LINE, STATUS_HINT, WHATSAPP_WARNING } from './coaching.ts';
 import { makePack } from '../creative/pack.ts';
+import { understand, understandingOn, type Fields } from './understand.ts';
 
 // ---- the questions, word for word from PAINS.md ------------------------------------------------
 
@@ -158,6 +159,74 @@ function productFromListing(slug: string): PickedProduct | undefined {
   return p && { slug: p.slug, title: p.title, source: 'amazon', asin: p.asin, image: p.image, ...(p.price ? { price: p.price } : {}) };
 }
 
+// ---- skipping what is already known (M5) -------------------------------------------------------
+
+type NextStep = 'q1' | 'q1_city' | 'q2' | 'q3' | 'q4' | 'pick' | 'done';
+
+export function nextMissing(p: ShopProfile): NextStep {
+  if (!p.sells) return 'q1';
+  if (!p.city) return 'q1_city';
+  if (!p.sellsOn?.length) return 'q2';
+  if (!p.adsBefore) return 'q3';
+  if (!p.postingBlocker) return 'q4';
+  if (!p.product) return 'pick';
+  return 'done';
+}
+
+// Moves to the first question still open; when everything is known, straight to the pick verdict and plan.
+function goNext(u: User, lead = ''): Outcome {
+  const flow = u.flow!;
+  const next = nextMissing(u.profile);
+  if (next === 'done') return choose(u, u.profile.product!);
+  if (next === 'pick' || next === 'q4') u.profile.answeredAt ??= next === 'pick' ? new Date().toISOString() : undefined;
+  if (next === 'q2') flow.q2Draft = [];
+  flow.step = next;
+  return { replies: promptFor(u, lead) };
+}
+
+const FIELD_STEP: Record<string, NextStep> = {
+  sells: 'q1', city: 'q1_city', sells_on: 'q2', ads_before: 'q3', posting_blocker: 'q4', product: 'pick', price: 'pick',
+};
+const label = <T,>(opts: { code: T; label: string }[], code: T) => opts.find((o) => o.code === code)?.label;
+
+// Saves what the model understood and asks only for what is still missing, in the owner's language.
+function applyFields(u: User, f: Fields, msg: Inbound, text: string): Outcome {
+  const p = u.profile;
+  const flow = (u.flow ??= { step: 'q1' });
+  const a = (p.answers ??= {});
+  if (f.sells) [p.sells, a.q1] = [f.sells, a.q1 ?? text];
+  if (f.city) p.city = f.city;
+  if (f.sellsOn) {
+    p.sellsOn = [...new Set([...(p.sellsOn ?? []).filter((s) => s !== 'shop'), ...f.sellsOn])];
+    if (f.sellsOn.length === 1 && f.sellsOn[0] === 'shop') p.sellsOn = ['shop'];
+    a.q2 = Q2_OPTIONS.filter((o) => p.sellsOn!.includes(o.code)).map((o) => o.label);
+  }
+  if (f.adsBefore) [p.adsBefore, a.q3] = [f.adsBefore, label(Q3_OPTIONS, f.adsBefore)];
+  if (f.postingBlocker) [p.postingBlocker, a.q4] = [f.postingBlocker, label(Q4_OPTIONS, f.postingBlocker)];
+  if (f.productSlug) {
+    p.product = productFromListing(f.productSlug);
+  } else if (msg.photoPath && (f.product || text)) {
+    p.product = { ...ownPhoto(msg.photoPath, f.product ?? text), ...(f.price ? { price: f.price } : {}) };
+  } else if (msg.photoPath) {
+    flow.pendingPhoto = msg.photoPath;
+  } else if (f.product) {
+    p.product = { slug: `own-${Date.now().toString(36)}`, title: f.product, source: 'photo', ...(f.price ? { price: f.price } : {}) };
+  }
+  if (p.product && f.price && !p.product.price) p.product.price = f.price;
+  p.understood = [...(p.understood ?? []), new Date().toISOString()].slice(-20);
+
+  const next = nextMissing(p);
+  if (next === 'pick' && flow.pendingPhoto) {
+    flow.step = 'photo_line';
+    return { replies: [{ kind: 'text', text: f.followUp?.text ?? PHOTO_LINE_Q }] };
+  }
+  const out = goNext(u);
+  // The model's follow-up, in the owner's language, replaces the English question text when it asks for the same thing.
+  const ask = f.followUp && FIELD_STEP[f.followUp.field] === next ? f.followUp.text : undefined;
+  if (ask && out.replies[0] && out.replies[0].kind !== 'image') out.replies[0] = { ...out.replies[0], text: ask };
+  return out;
+}
+
 // ---- the turn ----------------------------------------------------------------------------------
 
 type Turn = { u: User; msg: Inbound; text: string };
@@ -226,6 +295,7 @@ function step(t: Turn): Outcome {
         return { replies: [{ kind: 'text', text: Q1_CITY }] };
       }
       p.city = city;
+      if (nextMissing(p) !== 'q2') return goNext(u, `Got it: ${sells}, ${city}. `);
       flow.step = 'q2';
       flow.q2Draft = [];
       return { replies: [q2Reply([], false, `Got it: ${sells}, ${city}.\n\n${Q2_HINT}`)] };
@@ -235,6 +305,7 @@ function step(t: Turn): Outcome {
       if (!text) return { replies: promptFor(u) };
       p.city = text.trim().replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 60);
       p.answers = { ...p.answers, q1: p.answers?.q1 ? `${p.answers.q1}, ${p.city}` : p.city };
+      if (nextMissing(p) !== 'q2') return goNext(u, `Got it: ${p.sells ?? 'your shop'}, ${p.city}. `);
       flow.step = 'q2';
       flow.q2Draft = [];
       return { replies: [q2Reply([], false, `Got it: ${p.sells ?? 'your shop'}, ${p.city}.\n\n${Q2_HINT}`)] };
@@ -264,8 +335,7 @@ function step(t: Turn): Outcome {
       p.sellsOn = chosen;
       p.answers = { ...p.answers, q2: Q2_OPTIONS.filter((o) => chosen.includes(o.code)).map((o) => o.label) };
       delete flow.q2Draft;
-      flow.step = 'q3';
-      return { replies: [q3Reply()] };
+      return goNext(u);
     }
 
     case 'q3': {
@@ -273,8 +343,7 @@ function step(t: Turn): Outcome {
       if (!code) return { replies: promptFor(u, 'Please tap one: ') };
       p.adsBefore = code;
       p.answers = { ...p.answers, q3: Q3_OPTIONS.find((o) => o.code === code)!.label };
-      flow.step = 'q4';
-      return { replies: [q4Reply()] };
+      return goNext(u);
     }
 
     case 'q4': {
@@ -283,8 +352,7 @@ function step(t: Turn): Outcome {
       p.postingBlocker = code;
       p.answers = { ...p.answers, q4: Q4_OPTIONS.find((o) => o.code === code)!.label };
       p.answeredAt = now();
-      flow.step = 'pick';
-      return { replies: [pickReply(p, 'Thanks, I know your shop now.\n\n')] };
+      return goNext(u, 'Thanks, I know your shop now.\n\n');
     }
 
     case 'pick':
@@ -470,9 +538,20 @@ export async function runFlow(msg: Inbound): Promise<Reply[]> {
     console.log(`[report] /report for ${msg.userId}: ${report.total} click${report.total === 1 ? '' : 's'}`);
     return report.replies;
   }
+  // M5: typed text (any language), a voice-note transcript or a photo during onboarding goes to Claude Haiku first.
+  let fields: Fields | undefined;
+  const before = readDb().users[msg.userId];
+  const onboarding = before?.flow && ['q1', 'q1_city', 'q2', 'q3', 'q4', 'pick', 'photo_line'].includes(before.flow.step);
+  const freeForm = !msg.button && ((text && !text.startsWith('/') && !HELP_RE.test(text)) || msg.photoPath);
+  if (onboarding && freeForm && understandingOn() && !(before.flow!.step === 'photo_line' && !msg.photoPath)) {
+    fields = await understand(before.profile, { text, photoPath: msg.photoPath }, [Q1, Q2, Q3, Q4, PICK_Q].map((q) => q.split('\n').at(-1)!));
+    if (fields) console.log(`[understand] ${msg.userId}: ${Object.keys(fields).filter((k) => k !== 'followUp' && k !== 'language').join(', ') || 'nothing new'} (${fields.language ?? '?'})`);
+  }
+  const useFields = fields && Object.keys(fields).some((k) => k !== 'followUp' && k !== 'language');
+
   const first = await updateDb((db) => {
     const u = db.users[msg.userId];
-    const out = step({ u, msg, text });
+    const out = useFields ? applyFields(u, fields!, msg, text) : step({ u, msg, text });
     return { ...out, user: structuredClone(u) };
   });
   if (!first.then) return first.replies;

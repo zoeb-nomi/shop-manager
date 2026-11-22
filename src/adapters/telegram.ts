@@ -4,6 +4,7 @@ import path from 'node:path';
 import { Api, Bot, GrammyError, InlineKeyboard, InputFile, type Context } from 'grammy';
 import { handle, type Inbound, type Reply } from '../core/handle.ts';
 import { registerNotifier } from '../core/notify.ts';
+import { transcribe } from './sarvam.ts';
 
 const UPLOADS = 'data/uploads';
 
@@ -73,8 +74,31 @@ export function startTelegram(token: string): Bot {
     await run(ctx, { userId: String(ctx.from.id), surface: 'telegram', photoPath, text: ctx.message.caption });
   });
 
+  // A voice note (M5): Sarvam speech-to-text, then the same handle() as typed text.
+  bot.on(['message:voice', 'message:audio'], async (ctx) => {
+    const media = ctx.message.voice ?? ctx.message.audio!;
+    await ctx.replyWithChatAction('typing').catch(() => undefined);
+    const file = await ctx.api.getFile(media.file_id);
+    const res = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`);
+    if (!res.ok) throw new Error(`voice download failed (${res.status})`);
+    const voicePath = path.join(UPLOADS, `tg-${media.file_unique_id}${path.extname(file.file_path ?? '') || '.ogg'}`);
+    writeFileSync(voicePath, Buffer.from(await res.arrayBuffer()));
+    const heard = await transcribe(voicePath).catch((err) => {
+      console.error('[voice] failed:', (err as Error).message);
+      return undefined;
+    });
+    if (!heard) {
+      await ctx.reply('Sorry, I could not hear that clearly. Please type it, or tap a button.');
+      return;
+    }
+    console.log(`[voice] ${ctx.from.id} (${heard.language ?? '?'}): ${heard.text.slice(0, 80)}`);
+    await ctx.reply(`I heard: "${heard.text}"`, NO_PREVIEW);
+    await run(ctx, { userId: String(ctx.from.id), surface: 'telegram', text: heard.text });
+  });
+
   bot.on('callback_query:data', async (ctx) => {
-    await ctx.answerCallbackQuery();
+    // Telegram refuses to answer a tap on an old button ("query is too old"); the tap itself still counts.
+    await ctx.answerCallbackQuery().catch(() => undefined);
     await run(ctx, { userId: String(ctx.from.id), surface: 'telegram', button: ctx.callbackQuery.data }, true);
   });
 

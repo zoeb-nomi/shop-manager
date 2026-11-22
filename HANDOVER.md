@@ -34,6 +34,14 @@ Open:
 - `/report` and an automatic report about a minute after new clicks (Telegram message / web inbox). Code counts and picks the best channel; Claude writes one sentence (`prompts/report_back.md`), checked in code.
 - Works from the laptop end to end (2 clicks → report → automatic report). From Zoeb's phone: 1 click over the hotspot counted at 15:29 and the automatic Telegram report arrived; taps on the tunnel links after 15:31 never reached the bot (no request logged), while the tunnel itself answers from the laptop. Debugging parked by Zoeb. Every `/r/` hit is now logged in the bot terminal, so the next try shows what arrives.
 
+## M5: free-form onboarding (committed)
+
+- Buttons stay as shortcuts. Any typed reply (any language), a Telegram voice note or a photo during onboarding goes to Claude Haiku (`prompts/onboarding_extract.md`) with the question list; it returns the fields it could fill (what/city, where they sell, past ads, hardest thing, product, price) and one follow-up in the owner's language. Code (`src/core/understand.ts`) keeps a price only if the owner wrote that number and a listing only if it exists, saves the fields, skips answered questions (buttons skip them too) and asks only for what is missing; the model's follow-up is used only when it asks for the field code picked, otherwise the English question.
+- Voice: Telegram voice notes go to Sarvam speech-to-text (`src/adapters/sarvam.ts`, `SARVAM_API_KEY`, model saarika:v2.5, language auto-detected); the bot replies "I heard: ..." and treats it as typed text. Checked with a generated OGG/Opus clip (0.6 s); not yet tried with a real voice note from a phone. /chat takes text and photos, no voice.
+- "help / samajh nahi aaya" still gets one step + "Do it for me" without a model call. With the model off, the M2 code parsing runs as before.
+- Live on the bot through /chat: Hinglish → 4 fields filled, follow-up in Hinglish; Hindi → Hindi; "golden bird wali light" → festival verdict and plan.
+- Also fixed: tapping an old Telegram button no longer drops the tap ("query is too old").
+
 ## How to run
 
 ```bash
