@@ -13,7 +13,15 @@ process.env.COACH_LLM = 'off';
 
 type Reply = import('../src/core/types.ts').Reply;
 let handle: typeof import('../src/core/handle.ts').handle;
-before(async () => ({ handle } = await import('../src/core/handle.ts')));
+const rendered: { html: string; file: string; size: { width: number; height: number } }[] = [];
+before(async () => {
+  ({ handle } = await import('../src/core/handle.ts'));
+  const { useRenderer } = await import('../src/creative/render.ts');
+  useRenderer(async (html, size, file) => {
+    rendered.push({ html, file, size });
+    return `data/creatives/${file}`;
+  });
+});
 
 let n = 0;
 const newUser = () => `test:${++n}`;
@@ -112,7 +120,7 @@ test('plan: numbered steps, ends with "Let me get it done for you"; no Instagram
   assert.deepEqual(plan.kind === 'buttons' && plan.buttons, [{ id: 'do_it_for_me', label: 'Let me get it done for you' }]);
   assert.match(textOf(plan), /WhatsApp may block it/);
   const pack = await tap(u, 'do_it_for_me');
-  assert.match(textOf(last(pack)), /Your photo is fine, I'll make it look good\./);
+  assert.ok(pack.some((x) => /Your photo is fine, I'll make it look good\./.test(textOf(x))));
 });
 
 test('golden: Q3 "Tried, got no orders" → plan has 0 paid spend and no boost line', async () => {
@@ -135,8 +143,9 @@ test('golden: Q4 "Don\'t know what to post" → next reply is the pack, not coac
   const u = newUser();
   await onboard(u, ['whatsapp'], 'never', 'what_to_post');
   const r = await tap(u, 'pick:golden-bird-sconce');
-  assert.ok(!r.some((x) => /^1\. /m.test(textOf(x))), 'no numbered coaching steps');
-  assert.match(textOf(last(r)), /Making your posts for Golden Bird LED Wall Light/);
+  assert.ok(!r.some((x) => x.kind === 'buttons'), 'no coaching plan (the plan is the message with the button)');
+  assert.ok(r.some((x) => /Your posts for Golden Bird LED Wall Light/.test(textOf(x))));
+  assert.ok(r.some((x) => x.kind === 'image'), 'posters, not coaching');
   assert.equal(db().users[u].flow.step, 'pack');
 });
 
@@ -233,4 +242,46 @@ test('DEMO_SHOP_CITY set → "Use my Amazon products" skips the city question', 
   } finally {
     delete process.env.DEMO_SHOP_CITY;
   }
+});
+
+
+test('M3: "Let me get it done for you" sends 3 different posters + the group message, each with an instruction', async () => {
+  const u = newUser();
+  await onboard(u, ['whatsapp', 'social'], 'works', 'photos_bad');
+  await tap(u, 'pick:golden-bird-sconce');
+  const before = rendered.length;
+  const pack = await tap(u, 'do_it_for_me');
+  const posters = rendered.slice(before);
+  assert.deepEqual(posters.map((p) => `${p.size.width}x${p.size.height}`), ['1080x1920', '1080x1080', '1080x1920']);
+  assert.equal(new Set(posters.map((p) => p.html.replace(/data:[^)"']+/g, ''))).size, 3, 'three different designs');
+  const images = pack.filter((x) => x.kind === 'image');
+  assert.equal(images.length, 3);
+  assert.match(textOf(images[0]), /WhatsApp Status tonight, 7 to 10 PM/);
+  assert.match(textOf(images[1]), /feed post/);
+  assert.match(textOf(images[2]), /Instagram story/);
+  assert.ok(pack.some((x) => x.kind === 'text' && /https:\/\/www\.amazon\.in\/dp\/B0HL64BTHL/.test(x.text)), 'group message carries the link');
+  assert.ok(posters.every((p) => p.html.includes('Kashmakash Studios')));
+  assert.equal(db().users[u].flow.pack.files.length, 3);
+});
+
+test('M3: "Don\'t know which app" with no Instagram gets only the WhatsApp pieces', async () => {
+  const u = newUser();
+  await onboard(u, ['whatsapp'], 'never', 'which_app');
+  await tap(u, 'pick:golden-bird-sconce');
+  const pack = await tap(u, 'do_it_for_me');
+  assert.equal(pack.filter((x) => x.kind === 'image').length, 1);
+  assert.ok(pack.some((x) => /local groups/.test(textOf(x))));
+});
+
+test('M3: the seller price from their one line is on the posters; an own photo has no Amazon link', async () => {
+  const u = newUser();
+  await onboard(u, ['whatsapp', 'social'], 'never', 'what_to_post');
+  await tap(u, 'pick:photo');
+  const before = rendered.length;
+  const r = await handle({ userId: u, surface: 'web', photoPath: 'data/uploads/none.jpg', text: 'Brass diya stand, gift for pooja, Rs 650' });
+  const posters = rendered.slice(before);
+  assert.equal(posters.length, 3);
+  assert.ok(posters.every((p) => p.html.includes('₹650')));
+  assert.ok(r.some((x) => /Reply to this message to order\./.test(textOf(x))));
+  assert.ok(r.some((x) => /WhatsApp may block it/.test(textOf(x))), 'warning when there was no plan');
 });

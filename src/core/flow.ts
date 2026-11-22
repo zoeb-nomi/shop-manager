@@ -6,6 +6,7 @@ import type { Button, Inbound, Reply } from './types.ts';
 import { DEMO_SHOP, demoShopCity, loadProducts, parsePrice, productBySlug, shortTitle } from './products.ts';
 import { judgePick, phrase, rankTitles, bestFit, type FestivalTiming } from './festivals.ts';
 import { coachingPlan, DO_IT_BUTTON, PHOTO_LINE, STATUS_HINT, WHATSAPP_WARNING } from './coaching.ts';
+import { makePack } from '../creative/pack.ts';
 
 // ---- the questions, word for word from PAINS.md ------------------------------------------------
 
@@ -153,7 +154,7 @@ function helpReply(step: FlowStep, text: string): Reply[] {
 
 function productFromListing(slug: string): PickedProduct | undefined {
   const p = productBySlug(slug);
-  return p && { slug: p.slug, title: p.title, source: 'amazon', asin: p.asin, image: p.image };
+  return p && { slug: p.slug, title: p.title, source: 'amazon', asin: p.asin, image: p.image, ...(p.price ? { price: p.price } : {}) };
 }
 
 // ---- the turn ----------------------------------------------------------------------------------
@@ -423,15 +424,23 @@ function doItForMe(u: User): Outcome {
   return { replies: [], then: 'pack' };
 }
 
-// The creative pack (TASKS #6-7) is not built yet. This is where it plugs in; it says so plainly.
-function packReplies(u: User): Reply[] {
-  const name = u.profile.product ? shortTitle(u.profile.product.title) : 'your piece';
-  const lines = [
-    `On it. Making your posts for ${name}: a WhatsApp Status, a feed post, an Instagram story and a group message.`,
-    ...(u.profile.postingBlocker === 'photos_bad' ? [PHOTO_LINE] : []),
-    'Demo build: the ready-made posts arrive in the next update.',
-  ];
-  return [{ kind: 'text', text: lines.join('\n') }];
+// The creative pack (M3): copy + three posters + the group message. If rendering fails, say so plainly
+// and keep the button, so the owner can try again; never a dead end.
+async function packReplies(u: User): Promise<Reply[]> {
+  const product = u.profile.product;
+  if (!product) return [buttons('Pick a piece first, then I make the posts.', [DO_IT_BUTTON])];
+  try {
+    const pack = await makePack({ key: u.userId, profile: u.profile, product, hadPlan: Boolean(u.flow?.plan) });
+    console.log(`[pack] ${u.userId} ${product.slug}: ${pack.files.length} posters, copy=${pack.copySource}, ${pack.ms} ms`);
+    await updateDb((db) => {
+      const f = db.users[u.userId].flow!;
+      f.pack = { files: pack.files, copySource: pack.copySource, createdAt: new Date().toISOString() };
+    });
+    return pack.replies;
+  } catch (err) {
+    console.error('[pack] failed:', err);
+    return [buttons(`Sorry, I could not make the posts for ${shortTitle(product.title)} just now. Tap to try again.`, [DO_IT_BUTTON])];
+  }
 }
 
 export function profileText(u: User): string {
@@ -467,7 +476,7 @@ export async function runFlow(msg: Inbound): Promise<Reply[]> {
       f.step = 'pack';
       f.packRequestedAt = new Date().toISOString();
     });
-    return [...first.replies, ...packReplies(first.user)];
+    return [...first.replies, ...(await packReplies(first.user))];
   }
 
   // Coaching plan: the model call happens outside the db queue so other chats are not held up.

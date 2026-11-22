@@ -1,7 +1,7 @@
 // The seller's own Amazon listings, prepared before the event: demo-products/products.json.
 import { readFileSync } from 'node:fs';
 
-export type Product = { slug: string; asin: string; title: string; image: string; demo_angle?: string };
+export type Product = { slug: string; asin: string; title: string; image: string; price?: number; demo_angle?: string };
 
 // The demo shop behind "Use my Amazon products" (brand from SPEC "Creatives"; every listing is an LED wall light).
 // Set DEMO_SHOP_CITY in .env and the demo skips the city question.

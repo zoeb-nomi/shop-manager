@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { serve } from '@hono/node-server';
 import { webApp } from './adapters/web.ts';
 import { startTelegram } from './adapters/telegram.ts';
+import { warmRenderer } from './creative/render.ts';
 
 const port = Number(process.env.PORT ?? 8787);
 mkdirSync('data/creatives', { recursive: true });
@@ -11,6 +12,8 @@ mkdirSync('data/creatives', { recursive: true });
 serve({ fetch: webApp().fetch, port }, (info) => {
   console.log(`[web] http://localhost:${info.port}/chat`);
 });
+
+if (process.env.RENDER_WARM !== 'off') warmRenderer();
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (token) {
