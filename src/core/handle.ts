@@ -8,7 +8,7 @@ export type { Inbound, Reply } from './types.ts';
 // Keeps the last 10 messages (both sides, short) so free chat has context.
 function remember(msg: Inbound, replies: Reply[]): Promise<void> {
   const said = msg.text?.trim() || (msg.button ? `[tapped ${msg.button}]` : msg.photoPath ? '[sent a photo]' : '');
-  const answered = replies.map((r) => (r.kind === 'image' ? `[picture] ${r.caption ?? ''}` : r.text)).join(' / ');
+  const answered = replies.map((r) => (r.kind === 'image' ? `[picture] ${r.caption ?? ''}` : r.kind === 'voice' ? '[voice note]' : r.text)).join(' / ');
   return updateDb((db) => {
     const u = db.users[msg.userId];
     if (!u) return;

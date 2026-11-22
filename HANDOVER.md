@@ -48,6 +48,16 @@ Open:
 - The pack ends with "Post to Instagram": the feed poster, served at `PUBLIC_TUNNEL_URL/c/<file>`, plus a caption built from the copy (headline, Hindi headline, benefit, price, "DM to order, link in bio", hashtags), sent through `src/core/postToInstagramAction.js` (Zernio). With `INSTAGRAM_DRY_RUN=1` it replies with the request body instead of posting. Dry run checked through the bot; the poster URL loads over the tunnel.
 - Voice from a real phone works: a Hindi voice note was transcribed by Sarvam at 15:55.
 
+## After M6 (22 Nov, 16:10 to 16:30): tag `demo-safe`, four fixes, voice nudge
+
+- Tag `demo-safe` = the M6 commit (local tag). Zoeb reset to it once, then asked for the fixes back; they are cherry-picked on top of the voice nudge.
+- `/nudge`: festival nudge as text, a short Hindi voice note saying the same (Sarvam text-to-speech, `bulbul:v3`; `bulbul:v2` is retired; OGG/Opus via ffmpeg for Telegram, WAV for /chat), then the product buttons. Hindi line is a code template (`nudgeLines` in `src/core/flow.ts`, festival names in `FESTIVAL_HI`). Checked in /chat through the bot; not yet seen on Telegram.
+- Second "Post to Instagram" tap: "Already posted ✅" + link (`src/core/instagramPost.ts`); Zernio's duplicate 409 is read the same way.
+- Free text or voice after onboarding: Haiku chat with the profile, the plan and the last 10 messages (`src/core/chat.ts`, `prompts/chat_reply.md`); two sentences at most; a button only from the ones code offers.
+- `/report` counts clicks across all of the owner's packs.
+- `handle()` never throws: one friendly line instead of a raw error; Telegram says it too when a send or download fails.
+- The one real Instagram post went to the account connected in Zernio (`charmed_homes_`), with the gate light poster.
+
 ## How to run
 
 ```bash
