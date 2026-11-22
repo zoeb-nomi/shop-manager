@@ -10,6 +10,7 @@ import { voiceNote } from './voiceNote.ts';
 import { coachingPlan, DO_IT_BUTTON, PHOTO_LINE, STATUS_HINT, WHATSAPP_WARNING } from './coaching.ts';
 import { makePack } from '../creative/pack.ts';
 import { postFeedToInstagram } from './instagramPost.ts';
+import { chatOn, chatReply } from './chat.ts';
 import { understand, understandingOn, type Fields } from './understand.ts';
 
 // ---- the questions, word for word from PAINS.md ------------------------------------------------
@@ -610,6 +611,13 @@ export async function runFlow(msg: Inbound): Promise<Reply[]> {
     if (fields) console.log(`[understand] ${msg.userId}: ${Object.keys(fields).filter((k) => k !== 'followUp' && k !== 'language').join(', ') || 'nothing new'} (${fields.language ?? '?'})`);
   }
   const useFields = fields && Object.keys(fields).some((k) => k !== 'followUp' && k !== 'language');
+
+  // After onboarding (plan or posts made): free text or a voice note is a chat, answered by Haiku.
+  const afterOnboarding = before?.flow && ['plan', 'pack'].includes(before.flow.step);
+  if (afterOnboarding && freeForm && !msg.photoPath && chatOn()) {
+    const reply = await chatReply(before, text);
+    if (reply) return reply;
+  }
 
   const first = await updateDb((db) => {
     const u = db.users[msg.userId];

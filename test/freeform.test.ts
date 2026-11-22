@@ -87,3 +87,29 @@ test('help words still get one step + "Do it for me" (no model call)', async () 
   assert.deepEqual(ids(r[0]), ['do_it_for_me']);
   assert.equal(seen.length, calls);
 });
+
+test('fix: free text after onboarding goes to Haiku with the profile + last messages; a button only if code offers it', async () => {
+  const { useChatModel } = await import('../src/core/chat.ts');
+  const u = `free:${++n}`;
+  await handle({ userId: u, surface: 'telegram', text: '/start' });
+  answer = { sells: 'LED lights', city: 'Pune', sells_on: ['whatsapp'], ads_before: 'never', posting_blocker: 'photos_bad', product: 'golden bird', product_slug: 'golden-bird-sconce' };
+  await handle({ userId: u, surface: 'telegram', text: 'LED lights Pune, whatsapp, no ads, photos kharab, golden bird' });
+  assert.equal(db().users[u].flow.step, 'plan');
+
+  let req: { user: string } | undefined;
+  useChatModel(async (r) => { req = r; return { reply: 'Haan, aaj raat 7 se 10 baje Status daaliye. Main posts bana deta hoon. Teesri line. Chauthi line.', button: 'do_it_for_me' }; });
+  const r = await handle({ userId: u, surface: 'telegram', text: 'kab post karu?' });
+  assert.equal(r.length, 1);
+  assert.equal(textOf(r[0]), 'Haan, aaj raat 7 se 10 baje Status daaliye. Main posts bana deta hoon.', 'two sentences at most');
+  assert.deepEqual(ids(r[0]), ['do_it_for_me']);
+  assert.match(req!.user, /SHOP: \{"name":null,"sells":"LED lights","city":"Pune"/);
+  assert.match(req!.user, /owner: LED lights Pune, whatsapp/, 'last messages are in the prompt');
+  assert.match(req!.user, /OWNER_NOW: kab post karu\?/);
+
+  // A button the model invents, or one code does not offer now, is dropped.
+  useChatModel(async () => ({ reply: 'Theek hai.', button: 'post_instagram' }));
+  const r2 = await handle({ userId: u, surface: 'telegram', text: 'insta pe daal do' });
+  assert.equal(r2[0].kind, 'text');
+  assert.ok(db().users[u].history.length <= 10);
+  useChatModel(undefined);
+});

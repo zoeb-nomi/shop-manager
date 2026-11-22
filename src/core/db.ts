@@ -65,6 +65,7 @@ export type User = {
   profile: ShopProfile;
   flow?: Flow;
   outbox?: Reply[]; // messages the agent sends first (web chat picks them up by polling)
+  history?: { role: 'owner' | 'bot'; text: string }[]; // last 10 messages, for free chat after onboarding
   lastAutoReportAt?: string;
 };
 
