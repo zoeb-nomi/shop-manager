@@ -1,5 +1,6 @@
 // The one message handler. Telegram and the web chat both call handle() and only translate the replies.
 import type { Inbound, Reply } from './types.ts';
+import { touchUser } from './db.ts';
 
 export type { Inbound, Reply } from './types.ts';
 
@@ -24,6 +25,7 @@ function isStart(text: string): boolean {
 
 export async function handle(msg: Inbound): Promise<Reply[]> {
   const text = msg.text?.trim() ?? '';
+  await touchUser(msg.userId, msg.surface);
 
   if (isStart(text)) return intro();
 

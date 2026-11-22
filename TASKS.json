@@ -1,6 +1,6 @@
 [
- {"id":1,"task":"Scaffold: package.json, tsx, env, data/db.json helper, Hono on 8787 with GET /health","accept":"curl localhost:8787/health returns ok","status":"failing"},
- {"id":2,"task":"Core handle() + Telegram adapter (long polling). /start: agent introduces itself and asks the first shop question with buttons","accept":"Real Telegram: /start gets the intro and a question","status":"failing"},
+ {"id":1,"task":"Scaffold: package.json, tsx, env, data/db.json helper, Hono on 8787 with GET /health","accept":"curl localhost:8787/health returns ok","status":"passing"},
+ {"id":2,"task":"Core handle() + Telegram adapter (long polling). /start: agent introduces itself and asks the first shop question with buttons","accept":"Real Telegram: /start gets the intro and a question","status":"passing"},
  {"id":3,"task":"Shop profile interview: max 4 questions one at a time (shop, city, channels used, Instagram page?), stored in db.json, resumable","accept":"After answering, db.json has the profile; /profile prints it","status":"failing"},
  {"id":4,"task":"Inventory question: pick from products.json or send photo + one line; agent agrees or suggests a better piece using the festival table (ranking in code)","accept":"Picking a product gets a reasoned reply naming the festival and days left","status":"failing"},
  {"id":5,"task":"Coaching plan: code chooses channel order and budget from profile; model writes the steps (prompts/coaching_plan.md); ends with 'Let me get it done for you' button","accept":"Shop without Instagram gets no Instagram step; plan has numbered steps","status":"failing"},
