@@ -403,3 +403,14 @@ test('/nudge: festival nudge as text AND a Hindi voice note saying the same, the
   const r2 = await say(u, '/nudge');
   assert.deepEqual(r2.map((x) => x.kind), ['text', 'buttons']);
 });
+
+test('fix: a second "Post to Instagram" tap says "Already posted ✅" with the link, never an error', async () => {
+  const { updateDb } = await import('../src/core/db.ts');
+  const u = newUser();
+  await packFor(u);
+  await updateDb((d) => {
+    d.users[u].flow!.pack!.instagram = { at: new Date().toISOString(), result: 'posted', postId: 'p1', url: 'https://www.instagram.com/p/TEST/' };
+  });
+  const r = await tap(u, 'post_instagram');
+  assert.equal(textOf(last(r)), 'Already posted ✅ https://www.instagram.com/p/TEST/');
+});

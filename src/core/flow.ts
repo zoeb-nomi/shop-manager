@@ -9,7 +9,7 @@ import { judgePick, phrase, rankTitles, bestFit, headline, FESTIVAL_HI, type Fes
 import { voiceNote } from './voiceNote.ts';
 import { coachingPlan, DO_IT_BUTTON, PHOTO_LINE, STATUS_HINT, WHATSAPP_WARNING } from './coaching.ts';
 import { makePack } from '../creative/pack.ts';
-import { handlePostToInstagram } from './postToInstagramAction.js';
+import { postFeedToInstagram } from './instagramPost.ts';
 import { understand, understandingOn, type Fields } from './understand.ts';
 
 // ---- the questions, word for word from PAINS.md ------------------------------------------------
@@ -591,16 +591,7 @@ export async function runFlow(msg: Inbound): Promise<Reply[]> {
   const text = msg.text?.trim() ?? '';
   // "Post to Instagram" after the pack: the feed poster + its caption through Zernio (postToInstagramAction.js).
   if (msg.button === 'post_instagram') {
-    const pack = readDb().users[msg.userId]?.flow?.pack;
-    if (!pack?.feedPoster || !pack.igCaption) return [{ kind: 'text', text: 'Make the posts first, then I can put the feed post on Instagram.' }];
-    const replies = await handlePostToInstagram({ posterPath: pack.feedPoster, caption: pack.igCaption });
-    const result = replies.map((r) => (r.kind === 'image' ? r.caption ?? '' : r.kind === 'voice' ? '' : r.text)).join(' ').slice(0, 300);
-    console.log(`[instagram] ${msg.userId}: ${result.split('\n')[0]}`);
-    await updateDb((db) => {
-      const p = db.users[msg.userId]?.flow?.pack;
-      if (p) p.instagram = { at: new Date().toISOString(), result };
-    });
-    return replies;
+    return postFeedToInstagram(msg.userId);
   }
   if (isCommand(text, 'nudge')) return nudgeReplies(msg.userId);
   if (isCommand(text, 'report')) {

@@ -53,7 +53,7 @@ export type Flow = {
     codes?: Partial<Record<LinkFormat, string>>;
     feedPoster?: string;
     igCaption?: string;
-    instagram?: { at: string; result: string };
+    instagram?: { at: string; result: string; postId?: string; url?: string };
   };
 };
 
