@@ -42,6 +42,12 @@ Open:
 - Live on the bot through /chat: Hinglish → 4 fields filled, follow-up in Hinglish; Hindi → Hindi; "golden bird wali light" → festival verdict and plan.
 - Also fixed: tapping an old Telegram button no longer drops the tap ("query is too old").
 
+## M6: demo seed and Post to Instagram (committed)
+
+- `npm run seed-demo`: Kashmakash Studios, Pune, Amazon + WhatsApp, ads tried with no orders, hardest = what to post. Seeds every Telegram user already in db.json and the /chat user `demo` (open `/chat?user=demo`). Safe while the bot runs. `/start` then opens with the Christmas nudge ("Christmas is in 33 days. Your Golden Bird LED Wall Light makes a good gift…") and the product pick; picking goes straight to the pack (hardest = what to post).
+- The pack ends with "Post to Instagram": the feed poster, served at `PUBLIC_TUNNEL_URL/c/<file>`, plus a caption built from the copy (headline, Hindi headline, benefit, price, "DM to order, link in bio", hashtags), sent through `src/core/postToInstagramAction.js` (Zernio). With `INSTAGRAM_DRY_RUN=1` it replies with the request body instead of posting. Dry run checked through the bot; the poster URL loads over the tunnel.
+- Voice from a real phone works: a Hindi voice note was transcribed by Sarvam at 15:55.
+
 ## How to run
 
 ```bash

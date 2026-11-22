@@ -5,9 +5,10 @@ import { readDb, updateDb } from './db.ts';
 import { buildReport } from './report.ts';
 import type { Button, Inbound, Reply } from './types.ts';
 import { DEMO_SHOP, demoShopCity, loadProducts, parsePrice, productBySlug, shortTitle } from './products.ts';
-import { judgePick, phrase, rankTitles, bestFit, type FestivalTiming } from './festivals.ts';
+import { judgePick, phrase, rankTitles, bestFit, headline, type FestivalTiming } from './festivals.ts';
 import { coachingPlan, DO_IT_BUTTON, PHOTO_LINE, STATUS_HINT, WHATSAPP_WARNING } from './coaching.ts';
 import { makePack } from '../creative/pack.ts';
+import { handlePostToInstagram } from './postToInstagramAction.js';
 import { understand, understandingOn, type Fields } from './understand.ts';
 
 // ---- the questions, word for word from PAINS.md ------------------------------------------------
@@ -255,6 +256,8 @@ function step(t: Turn): Outcome {
   }
   if (isCommand(text, 'profile')) return { replies: [{ kind: 'text', text: profileText(u) }] };
   if (isCommand(text, 'start')) {
+    // An onboarded shop at the pick: the agent opens with the festival nudge (SPEC Flow 8), then the pick.
+    if (flow.step === 'pick' && p.answeredAt && p.productSource !== 'photos') return { replies: nudge(u) };
     const fresh = flow.step === 'q1' && !p.answers?.q1;
     return { replies: fresh ? promptFor(u) : [{ kind: 'text', text: 'Welcome back! We were here:' }, ...promptFor(u)] };
   }
@@ -418,6 +421,17 @@ function step(t: Turn): Outcome {
   }
 }
 
+// "Christmas is in 33 days. Your Golden Bird LED Wall Light makes a good gift." Facts and ranking from code.
+function nudge(u: User): Reply[] {
+  const head = headline();
+  const listings = loadProducts();
+  const top = listings[rankTitles(listings.map((x) => x.title))[0]];
+  const lead = head
+    ? `Namaste ${u.profile.shopName ?? ''}! ${phrase(head)}. Your ${shortTitle(top.title)} makes a good gift; I can make its posts now.\n\n`.replace(' !', '!')
+    : 'Namaste! ';
+  return [pickReply(u.profile, lead)];
+}
+
 function ownPhoto(photoPath: string, line: string): PickedProduct {
   const price = parsePrice(line);
   return { slug: `photo-${Date.now().toString(36)}`, title: line.trim().slice(0, 140), source: 'photo', photoPath, ...(price ? { price } : {}) };
@@ -503,7 +517,15 @@ async function packReplies(u: User): Promise<Reply[]> {
     console.log(`[pack] ${u.userId} ${product.slug}: ${pack.files.length} posters, copy=${pack.copySource}, ${pack.ms} ms`);
     await updateDb((db) => {
       const f = db.users[u.userId].flow!;
-      f.pack = { files: pack.files, copySource: pack.copySource, createdAt: new Date().toISOString(), slug: product.slug, codes: pack.codes };
+      f.pack = {
+        files: pack.files,
+        copySource: pack.copySource,
+        createdAt: new Date().toISOString(),
+        slug: product.slug,
+        codes: pack.codes,
+        feedPoster: pack.feedPoster,
+        igCaption: pack.igCaption,
+      };
     });
     return pack.replies;
   } catch (err) {
@@ -532,6 +554,19 @@ export function profileText(u: User): string {
 
 export async function runFlow(msg: Inbound): Promise<Reply[]> {
   const text = msg.text?.trim() ?? '';
+  // "Post to Instagram" after the pack: the feed poster + its caption through Zernio (postToInstagramAction.js).
+  if (msg.button === 'post_instagram') {
+    const pack = readDb().users[msg.userId]?.flow?.pack;
+    if (!pack?.feedPoster || !pack.igCaption) return [{ kind: 'text', text: 'Make the posts first, then I can put the feed post on Instagram.' }];
+    const replies = await handlePostToInstagram({ posterPath: pack.feedPoster, caption: pack.igCaption });
+    const result = replies.map((r) => (r.kind === 'image' ? r.caption ?? '' : r.text)).join(' ').slice(0, 300);
+    console.log(`[instagram] ${msg.userId}: ${result.split('\n')[0]}`);
+    await updateDb((db) => {
+      const p = db.users[msg.userId]?.flow?.pack;
+      if (p) p.instagram = { at: new Date().toISOString(), result };
+    });
+    return replies;
+  }
   if (isCommand(text, 'report')) {
     const u = readDb().users[msg.userId];
     const report = await buildReport(u);

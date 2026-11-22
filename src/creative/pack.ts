@@ -5,6 +5,7 @@ import type { Reply } from '../core/types.ts';
 import { bestFit } from '../core/festivals.ts';
 import { shortTitle } from '../core/products.ts';
 import { createLinks } from '../core/links.ts';
+import { POST_TO_INSTAGRAM_BUTTON } from '../core/postToInstagramAction.js';
 import type { LinkFormat } from '../core/db.ts';
 import { cleanSellerText, creativeCopy, LINK_TOKEN, type Copy } from './copy.ts';
 import { photoDataUrl } from './assets.ts';
@@ -33,7 +34,16 @@ export type Pack = {
   copySource: 'model' | 'fallback';
   ms: number;
   codes: Partial<Record<LinkFormat, string>>;
+  feedPoster?: string;
+  igCaption: string;
 };
+
+// Instagram caption for the feed poster (Instagram does not make caption links clickable: "link in bio").
+export function instagramCaption(copy: Copy, price?: number): string {
+  return [copy.headline_en, copy.headline_hi, copy.benefit_en, price ? `₹${price.toLocaleString('en-IN')}` : '', 'DM to order, link in bio.', copy.hashtags.join(' ')]
+    .filter(Boolean)
+    .join('\n');
+}
 
 export async function makePack(opts: { key: string; profile: ShopProfile; product: PickedProduct; hadPlan: boolean }): Promise<Pack> {
   const t0 = Date.now();
@@ -101,5 +111,6 @@ export async function makePack(opts: { key: string; profile: ShopProfile; produc
     });
   }
   if (!opts.hadPlan) replies.push({ kind: 'text', text: WHATSAPP_WARNING });
-  return { replies, files: [status, feed, story].filter(Boolean), copySource: source, ms: Date.now() - t0, codes };
+  if (feed) replies.push({ kind: 'buttons', text: 'Want me to post the feed post on Instagram for you?', buttons: [POST_TO_INSTAGRAM_BUTTON] });
+  return { replies, files: [status, feed, story].filter(Boolean), copySource: source, ms: Date.now() - t0, codes, feedPoster: feed, igCaption: instagramCaption(copy, product.price) };
 }

@@ -41,8 +41,9 @@ export const CHAT_HTML = /* html */ `<!doctype html>
 <script>
   const log = document.getElementById('log');
   const input = document.getElementById('t');
-  let userId;
-  try { userId = localStorage.getItem('sm_user'); } catch {}
+  // /chat?user=demo opens the seeded demo shop (npm run seed-demo).
+  let userId = new URLSearchParams(location.search).get('user');
+  try { userId = userId || localStorage.getItem('sm_user'); } catch {}
   if (!userId) {
     userId = Math.random().toString(36).slice(2, 12);
     try { localStorage.setItem('sm_user', userId); } catch {}

@@ -146,7 +146,8 @@ test('golden: Q4 "Don\'t know what to post" → next reply is the pack, not coac
   const u = newUser();
   await onboard(u, ['whatsapp'], 'never', 'what_to_post');
   const r = await tap(u, 'pick:golden-bird-sconce');
-  assert.ok(!r.some((x) => x.kind === 'buttons'), 'no coaching plan (the plan is the message with the button)');
+  assert.ok(!r.some((x) => x.kind === 'buttons' && x.buttons.some((b) => b.id === 'do_it_for_me')), 'no coaching plan (the plan is the message with that button)');
+  assert.deepEqual(ids(last(r)), ['post_instagram'], 'the pack ends with "Post to Instagram"');
   assert.ok(r.some((x) => /Your posts for Golden Bird LED Wall Light/.test(textOf(x))));
   assert.ok(r.some((x) => x.kind === 'image'), 'posters, not coaching');
   assert.equal(db().users[u].flow.step, 'pack');

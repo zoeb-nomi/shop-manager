@@ -45,7 +45,16 @@ export type Flow = {
   plan?: { text: string; steps: unknown[]; source: 'model' | 'fallback' | 'code'; createdAt: string };
   noAdsNoticeShown?: boolean;
   packRequestedAt?: string;
-  pack?: { files: string[]; copySource: 'model' | 'fallback'; createdAt: string; slug?: string; codes?: Partial<Record<LinkFormat, string>> };
+  pack?: {
+    files: string[];
+    copySource: 'model' | 'fallback';
+    createdAt: string;
+    slug?: string;
+    codes?: Partial<Record<LinkFormat, string>>;
+    feedPoster?: string;
+    igCaption?: string;
+    instagram?: { at: string; result: string };
+  };
 };
 
 export type User = {
