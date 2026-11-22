@@ -6,7 +6,7 @@ export const CHAT_HTML = /* html */ `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shop Manager</title>
 <style>
-  :root { --bg:#efeae2; --head:#075e54; --me:#d9fdd3; --bot:#fff; --ink:#111b21; --muted:#667781; --accent:#00a884; }
+  :root { --bg:#ECE5DD; --head:#075E54; --me:#DCF8C6; --bot:#fff; --ink:#111b21; --muted:#667781; --accent:#00a884; }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg);
@@ -14,6 +14,10 @@ export const CHAT_HTML = /* html */ `<!doctype html>
   header { background: var(--head); color: #fff; padding: 12px 16px; display: flex; gap: 10px; align-items: center; }
   header .dot { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); display: grid; place-items: center; font-weight: 700; }
   header small { display: block; opacity: .8; font-size: 12px; }
+  /* Says plainly what this page is. Sits under the header and stays put: only the messages scroll. */
+  .banner { background: #fff3c4; color: #54450b; font-size: 12.5px; line-height: 1.35; padding: 6px 16px; text-align: center; }
+  .guide { background: #f7f5f0; color: var(--muted); font-size: 12.5px; line-height: 1.35; padding: 6px 16px; text-align: center; border-bottom: 1px solid #e0dbd2; }
+  .guide b { color: var(--ink); font-weight: 600; }
   #log { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
   .msg { max-width: 85%; padding: 8px 10px; border-radius: 8px; white-space: pre-wrap; word-wrap: break-word; box-shadow: 0 1px .5px rgba(0,0,0,.13); }
   .bot { align-self: flex-start; background: var(--bot); }
@@ -31,6 +35,8 @@ export const CHAT_HTML = /* html */ `<!doctype html>
 </head>
 <body>
 <header><div class="dot">S</div><div>Shop Manager<small>your marketing team</small></div></header>
+<div class="banner" role="note">Simulated WhatsApp chat &middot; Shop Manager runs on Telegram today (@Shopma_bot) and WhatsApp next</div>
+<div class="guide" role="note"><b>Try it:</b> tap a light &rarr; &lsquo;Let me get it done for you&rsquo; &rarr; see 3 posters + group message. You can also type or ask anything in Hindi/English.</div>
 <main id="log" aria-live="polite"></main>
 <form id="f" autocomplete="off">
   <button type="button" class="attach" id="attach" aria-label="Send a photo">&#128247;</button>
