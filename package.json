@@ -9,13 +9,16 @@
     "start": "node --env-file-if-exists=.env --import tsx src/main.ts",
     "dev": "node --env-file-if-exists=.env --watch --import tsx src/main.ts",
     "web": "TELEGRAM_BOT_TOKEN= node --env-file-if-exists=.env --import tsx src/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
     "@hono/node-server": "^2.1.11",
     "grammy": "^1.46.0",
     "hono": "^4.13.20",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

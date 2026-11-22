@@ -24,13 +24,17 @@ export const CHAT_HTML = /* html */ `<!doctype html>
   .btns button:disabled { color: var(--muted); cursor: default; }
   form { display: flex; gap: 8px; padding: 8px 16px 12px; background: #f0f2f5; }
   input { flex: 1; border: 0; border-radius: 20px; padding: 10px 14px; font: inherit; min-width: 0; }
-  form button { border: 0; border-radius: 50%; width: 42px; height: 42px; background: var(--accent); color: #fff; font-size: 18px; cursor: pointer; }
+  form button { border: 0; border-radius: 50%; width: 42px; height: 42px; background: var(--accent); color: #fff; font-size: 18px; cursor: pointer; flex: none; }
+  form .attach { background: none; color: var(--muted); font-size: 22px; }
+  #file { display: none; }
 </style>
 </head>
 <body>
 <header><div class="dot">S</div><div>Shop Manager<small>your marketing team</small></div></header>
 <main id="log" aria-live="polite"></main>
 <form id="f" autocomplete="off">
+  <button type="button" class="attach" id="attach" aria-label="Send a photo">&#128247;</button>
+  <input type="file" id="file" accept="image/jpeg,image/png,image/webp">
   <input id="t" placeholder="Type a message" aria-label="Message">
   <button aria-label="Send">&#10148;</button>
 </form>
@@ -52,16 +56,18 @@ export const CHAT_HTML = /* html */ `<!doctype html>
     return d;
   }
 
-  function render(r) {
-    const d = bubble('bot');
+  // target: the bubble whose button was tapped; a reply marked edit redraws that bubble in place.
+  function render(r, target) {
+    const d = target || bubble('bot');
+    d.textContent = '';
     if (r.kind === 'image') {
       const img = document.createElement('img');
-      img.src = r.path; img.alt = r.caption || 'creative';
+      img.src = r.path; img.alt = r.caption || 'product photo';
       d.appendChild(img);
       if (r.caption) d.appendChild(document.createTextNode(r.caption));
       return;
     }
-    d.textContent = r.text;
+    d.appendChild(document.createTextNode(r.text));
     if (r.kind === 'buttons') {
       const box = document.createElement('div');
       box.className = 'btns';
@@ -70,7 +76,7 @@ export const CHAT_HTML = /* html */ `<!doctype html>
         el.textContent = b.label;
         el.onclick = () => {
           box.querySelectorAll('button').forEach((x) => (x.disabled = true));
-          send({ button: b.id }, b.label);
+          send({ button: b.id }, b.label, d);
         };
         box.appendChild(el);
       }
@@ -78,19 +84,50 @@ export const CHAT_HTML = /* html */ `<!doctype html>
     }
   }
 
-  async function send(payload, shown) {
-    if (shown) bubble('me').textContent = shown;
+  function showPhoto(src) {
+    const d = bubble('me');
+    const img = document.createElement('img');
+    img.src = src; img.alt = 'your photo';
+    d.appendChild(img);
+  }
+
+  async function send(payload, shown, from) {
+    // Typed messages show at once; a tapped button shows only if it did not just redraw its own message.
+    if (shown && !from) { bubble('me').textContent = shown; shown = ''; }
     try {
       const res = await fetch('/api/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, ...payload }),
       });
       const data = await res.json();
-      (data.replies || [{ kind: 'text', text: data.error || 'Something went wrong.' }]).forEach(render);
+      const replies = data.replies || [{ kind: 'text', text: data.error || 'Something went wrong.' }];
+      const inPlace = from && replies[0] && replies[0].edit;
+      if (shown && !inPlace) bubble('me').textContent = shown;
+      replies.forEach((r, i) => render(r, inPlace && i === 0 ? from : undefined));
     } catch {
+      if (shown) bubble('me').textContent = shown;
       render({ kind: 'text', text: 'Could not reach the server. Try again.' });
     }
   }
+
+  // Photo + the typed line (if any) as its caption, like Telegram.
+  const file = document.getElementById('file');
+  document.getElementById('attach').onclick = () => file.click();
+  file.onchange = () => {
+    const f = file.files && file.files[0];
+    file.value = '';
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) { render({ kind: 'text', text: 'That photo is too big. Under 8 MB, please.' }); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const caption = input.value.trim();
+      input.value = '';
+      showPhoto(reader.result);
+      if (caption) bubble('me').textContent = caption;
+      send(caption ? { photo: reader.result, text: caption } : { photo: reader.result });
+    };
+    reader.readAsDataURL(f);
+  };
 
   document.getElementById('f').onsubmit = (e) => {
     e.preventDefault();
