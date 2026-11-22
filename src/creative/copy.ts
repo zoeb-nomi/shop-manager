@@ -55,6 +55,27 @@ const words = (s: string, n: number) => {
 const DEVANAGARI = /[ऀ-ॿ]/;
 const OFFER_WORDS = /\b(free|discount\w*|offer\w*|cashback|deal|bogo|sale)\b|%|\boff\b|मुफ़?्त|फ्री|छूट|ऑफ़?र/i;
 const CERT_WORDS = /\b(ISI|BIS|certified|certificate|warranty|guarantee\w*|ISO|CE)\b/gi;
+// Material and quality claims: allowed only when the title says so (key = what the title must contain).
+const CLAIMS: [RegExp, string][] = [
+  ...['solid', 'pure', 'genuine', 'original', 'authentic', 'premium', 'luxury', 'luxurious', 'handmade', 'handcrafted', 'hand-made',
+    'brass', 'copper', 'bronze', 'silver', 'steel', 'iron', 'aluminium', 'aluminum', 'wood', 'wooden', 'teak', 'glass', 'crystal',
+    'marble', 'ceramic', 'porcelain', 'leather', 'durable', 'sturdy', 'rust-proof', 'rustproof', 'waterproof', 'water-resistant',
+    'shatterproof', 'unbreakable', 'eco-friendly', 'energy-saving', 'long-lasting', 'lifetime', 'best', 'finest', 'top-quality',
+    'high-quality', 'quality'].map((w): [RegExp, string] => [new RegExp(`\\b${w}\\b`, 'i'), w.replace(/-/g, '')]),
+  [/\bgold(?:en)?\b/i, 'gold'],
+  [/पीतल/, 'brass'], [/तांब/, 'copper'], [/चांदी|चाँदी/, 'silver'], [/लकड़ी/, 'wood'], [/शुद्ध/, 'pure'], [/असली/, 'genuine'],
+  [/प्रीमियम/, 'premium'], [/सुनहर|सोने/, 'gold'], [/हाथ से बन/, 'handmade'],
+];
+
+function unsupportedClaim(text: string, title: string): string | undefined {
+  const t = title.toLowerCase().replace(/-/g, '');
+  for (const [re, key] of CLAIMS) {
+    const m = text.match(re);
+    if (m && !t.includes(key)) return m[0];
+  }
+  return undefined;
+}
+
 const RUPEES = /(?:\brs\.?|₹|\binr)\s*(\d[\d,]*)|(\d[\d,]*)\s*(?:rs\b|rupees?\b|\/-)/gi;
 
 // Returns the reason the copy is unusable, or undefined if it passes.
@@ -69,6 +90,8 @@ export function problem(c: Copy, input: CopyInput): string | undefined {
   }
   const title = input.title.toLowerCase();
   for (const m of all.matchAll(CERT_WORDS)) if (!title.includes(m[0].toLowerCase())) return `claims "${m[0]}"`;
+  const claim = unsupportedClaim(all, input.title);
+  if (claim) return `says "${claim}", which the title does not`;
   if (!input.timing && c.festival_badge.trim()) return 'festival badge without a festival';
   if (!c.forward_text_hi_en.includes(LINK_TOKEN)) return `forward text lacks ${LINK_TOKEN}`;
   return undefined;

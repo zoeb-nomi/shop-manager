@@ -5,6 +5,8 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { handle, type Reply } from '../core/handle.ts';
+import { recordClick } from '../core/links.ts';
+import { onCountedClick, takeOutbox } from '../core/notify.ts';
 import { CHAT_HTML } from './chat-page.ts';
 
 const UPLOADS = 'data/uploads';
@@ -50,6 +52,27 @@ export function webApp(): Hono {
 
     const replies = await handle({ userId: `web:${userId}`, surface: 'web', text, button, photoPath });
     return c.json({ replies: forWeb(replies) });
+  });
+
+  // Messages the agent sends first (automatic report back); the chat page polls this.
+  app.get('/api/inbox', async (c) => {
+    const userId = (c.req.query('userId') ?? '').slice(0, 64);
+    if (!userId) return c.json({ error: 'userId required' }, 400);
+    return c.json({ replies: forWeb(await takeOutbox(`web:${userId}`)) });
+  });
+
+  // Short tracking links: log the click, then send the visitor to the product page.
+  app.on(['GET', 'HEAD'], '/r/:code', async (c) => {
+    const ip = c.req.header('x-forwarded-for')?.split(',')[0].trim() ?? (c.env as { incoming?: { socket?: { remoteAddress?: string } } })?.incoming?.socket?.remoteAddress;
+    const hit = await recordClick(c.req.param('code'), { ua: c.req.header('user-agent'), ip, method: c.req.method });
+    const ua = (c.req.header('user-agent') ?? '-').slice(0, 40);
+    if (!hit) {
+      console.log(`[click] unknown code ${c.req.param('code')} (${ua})`);
+      return c.text('This link is not known.', 404);
+    }
+    console.log(`[click] ${hit.link.format} ${hit.link.code} for ${hit.link.userId}: ${hit.counted ? 'counted' : 'not counted'} (${ua})`);
+    if (hit.counted) onCountedClick(hit.link.userId);
+    return c.redirect(hit.target, 302);
   });
 
   app.use('/c/*', serveStatic({ root: './data/creatives', rewriteRequestPath: (p) => p.replace(/^\/c/, '') }));

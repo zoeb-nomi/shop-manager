@@ -1,7 +1,8 @@
 // The agent-led conversation: 4 opening questions (PAINS.md), the product pick, then the coaching plan.
 // One question per message, buttons over typing, resumable from db.json at every step.
 import type { AdsBefore, Blocker, Flow, FlowStep, PickedProduct, SellsOn, ShopProfile, User } from './db.ts';
-import { updateDb } from './db.ts';
+import { readDb, updateDb } from './db.ts';
+import { buildReport } from './report.ts';
 import type { Button, Inbound, Reply } from './types.ts';
 import { DEMO_SHOP, demoShopCity, loadProducts, parsePrice, productBySlug, shortTitle } from './products.ts';
 import { judgePick, phrase, rankTitles, bestFit, type FestivalTiming } from './festivals.ts';
@@ -434,7 +435,7 @@ async function packReplies(u: User): Promise<Reply[]> {
     console.log(`[pack] ${u.userId} ${product.slug}: ${pack.files.length} posters, copy=${pack.copySource}, ${pack.ms} ms`);
     await updateDb((db) => {
       const f = db.users[u.userId].flow!;
-      f.pack = { files: pack.files, copySource: pack.copySource, createdAt: new Date().toISOString() };
+      f.pack = { files: pack.files, copySource: pack.copySource, createdAt: new Date().toISOString(), slug: product.slug, codes: pack.codes };
     });
     return pack.replies;
   } catch (err) {
@@ -463,6 +464,12 @@ export function profileText(u: User): string {
 
 export async function runFlow(msg: Inbound): Promise<Reply[]> {
   const text = msg.text?.trim() ?? '';
+  if (isCommand(text, 'report')) {
+    const u = readDb().users[msg.userId];
+    const report = await buildReport(u);
+    console.log(`[report] /report for ${msg.userId}: ${report.total} click${report.total === 1 ? '' : 's'}`);
+    return report.replies;
+  }
   const first = await updateDb((db) => {
     const u = db.users[msg.userId];
     const out = step({ u, msg, text });

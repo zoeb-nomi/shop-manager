@@ -138,6 +138,15 @@ export const CHAT_HTML = /* html */ `<!doctype html>
   };
 
   send({ text: '/start' });
+
+  // The agent can message first (automatic report back): pick those up every few seconds.
+  setInterval(async () => {
+    try {
+      const res = await fetch('/api/inbox?userId=' + encodeURIComponent(userId));
+      const data = await res.json();
+      (data.replies || []).forEach((r) => render(r));
+    } catch {}
+  }, 5000);
 </script>
 </body>
 </html>`;

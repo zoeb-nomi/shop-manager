@@ -4,6 +4,8 @@ import type { PickedProduct, ShopProfile } from '../core/db.ts';
 import type { Reply } from '../core/types.ts';
 import { bestFit } from '../core/festivals.ts';
 import { shortTitle } from '../core/products.ts';
+import { createLinks } from '../core/links.ts';
+import type { LinkFormat } from '../core/db.ts';
 import { cleanSellerText, creativeCopy, LINK_TOKEN, type Copy } from './copy.ts';
 import { photoDataUrl } from './assets.ts';
 import { renderPng } from './render.ts';
@@ -15,8 +17,8 @@ import { igStory, SIZE as STORY_SIZE } from './templates/ig_story.ts';
 export const PHOTO_LINE = "Your photo is fine, I'll make it look good.";
 const WHATSAPP_WARNING = "Don't send the same offer to 100s of numbers; WhatsApp may block it.";
 
-// Where each format's link points. Short tracking links (/r/:code, TASKS #8) replace this.
-export function linkFor(product: PickedProduct): string | undefined {
+// The product page the short links redirect to. An own photo with no listing has none, so it gets no links.
+export function productPage(product: PickedProduct): string | undefined {
   return product.asin ? `https://www.amazon.in/dp/${product.asin}` : undefined;
 }
 
@@ -25,7 +27,13 @@ export function forwardText(copy: Copy, link?: string): string {
   return copy.forward_text_hi_en.replace(LINK_TOKEN, tail).replace(/\s+$/, '');
 }
 
-export type Pack = { replies: Reply[]; files: string[]; copySource: 'model' | 'fallback'; ms: number };
+export type Pack = {
+  replies: Reply[];
+  files: string[];
+  copySource: 'model' | 'fallback';
+  ms: number;
+  codes: Partial<Record<LinkFormat, string>>;
+};
 
 export async function makePack(opts: { key: string; profile: ShopProfile; product: PickedProduct; hadPlan: boolean }): Promise<Pack> {
   const t0 = Date.now();
@@ -35,7 +43,10 @@ export async function makePack(opts: { key: string; profile: ShopProfile; produc
     creativeCopy({ title: product.title, price: product.price, timing }),
     photoDataUrl(product).catch(() => undefined),
   ]);
-  const link = linkFor(product);
+  // One short link per format (/r/:code), so the report can tell which place brought the clicks.
+  const page = productPage(product);
+  const { codes, urls } = page ? await createLinks(opts.key, product.slug, page) : { codes: {}, urls: {} as Partial<Record<LinkFormat, string>> };
+  const link = urls.story;
   const data: PosterData = {
     photo,
     headline: copy.headline_en,
@@ -66,23 +77,29 @@ export async function makePack(opts: { key: string; profile: ShopProfile; produc
   const name = shortTitle(product.source === 'photo' ? cleanSellerText(product.title)[0] ?? 'your piece' : product.title);
   const replies: Reply[] = [
     { kind: 'text', text: [`Done. Your posts for ${name}, one per place. Post them in this order:`, ...(p.postingBlocker === 'photos_bad' ? [PHOTO_LINE] : [])].join('\n') },
-    { kind: 'image', path: status, caption: '1. Post this as your WhatsApp Status tonight, 7 to 10 PM.' },
+    {
+      kind: 'image',
+      path: status,
+      caption: `1. Post this as your WhatsApp Status tonight, 7 to 10 PM.${urls.status ? ` Add this link in the Status text: ${urls.status}` : ''}`,
+    },
     { kind: 'text', text: '2. Forward the next message to your 2 local groups (society, market association). Send the Status picture with it.' },
-    { kind: 'text', text: forwardText(copy, link) },
+    { kind: 'text', text: forwardText(copy, urls.group) },
   ];
   if (feed && story) {
     replies.push({
       kind: 'image',
       path: feed,
-      caption: social ? '3. Post this on Instagram and Facebook as a feed post.' : '3. Feed post for Instagram or Facebook, for when you start a page.',
+      caption:
+        (social ? '3. Post this on Instagram and Facebook as a feed post.' : '3. Feed post for Instagram or Facebook, for when you start a page.') +
+        (urls.feed ? ` Put this link in the caption (Facebook) or your bio (Instagram): ${urls.feed}` : ''),
     });
     const tags = copy.hashtags.length ? ` Hashtags: ${copy.hashtags.join(' ')}` : '';
     replies.push({
       kind: 'image',
       path: story,
-      caption: `4. Post this as an Instagram story at 8 PM.${link ? ` Add a link sticker: ${link}` : ' Write "DM to order".'}${tags}`,
+      caption: `4. Post this as an Instagram story at 8 PM.${urls.story ? ` Add a link sticker: ${urls.story}` : ' Write "DM to order".'}${tags}`,
     });
   }
   if (!opts.hadPlan) replies.push({ kind: 'text', text: WHATSAPP_WARNING });
-  return { replies, files: [status, feed, story].filter(Boolean), copySource: source, ms: Date.now() - t0 };
+  return { replies, files: [status, feed, story].filter(Boolean), copySource: source, ms: Date.now() - t0, codes };
 }

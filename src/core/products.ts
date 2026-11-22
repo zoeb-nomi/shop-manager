@@ -4,9 +4,14 @@ import { readFileSync } from 'node:fs';
 export type Product = { slug: string; asin: string; title: string; image: string; price?: number; demo_angle?: string };
 
 // The demo shop behind "Use my Amazon products" (brand from SPEC "Creatives"; every listing is an LED wall light).
-// Set DEMO_SHOP_CITY in .env and the demo skips the city question.
+// The demo shop is in Pune (Zoeb, 22 Nov), so "Use my Amazon products" skips the city question.
+// DEMO_SHOP_CITY overrides it; DEMO_SHOP_CITY=ask brings the question back.
 export const DEMO_SHOP = { shopName: 'Kashmakash Studios', sells: 'LED wall lights' };
-export const demoShopCity = (): string | undefined => process.env.DEMO_SHOP_CITY?.trim() || undefined;
+export const demoShopCity = (): string | undefined => {
+  const v = process.env.DEMO_SHOP_CITY?.trim();
+  if (v?.toLowerCase() === 'ask') return undefined;
+  return v || 'Pune';
+};
 
 const PRODUCTS_PATH = process.env.PRODUCTS_PATH ?? 'demo-products/products.json';
 let cache: Product[] | undefined;

@@ -10,6 +10,9 @@ const dir = mkdtempSync(path.join(tmpdir(), 'shop-flow-'));
 process.env.DB_PATH = path.join(dir, 'db.json');
 process.env.DEMO_DATE = '2026-11-22';
 process.env.COACH_LLM = 'off';
+process.env.PUBLIC_BASE_URL = 'http://test.local:8787';
+process.env.REPORT_AFTER_MS = '30';
+process.env.REPORT_GAP_MS = '0';
 
 type Reply = import('../src/core/types.ts').Reply;
 let handle: typeof import('../src/core/handle.ts').handle;
@@ -194,10 +197,12 @@ test('resumable: /start after a break returns to the open question', async () =>
   assert.equal(textOf(last(r)), 'Have you paid for ads before?');
 });
 
-test('the Amazon button loads the listings and asks only for the city', async () => {
+test('DEMO_SHOP_CITY=ask: the Amazon button loads the listings and asks only for the city', async () => {
+  process.env.DEMO_SHOP_CITY = 'ask';
   const u = newUser();
   await say(u, '/start');
   const r = await tap(u, 'use_amazon');
+  delete process.env.DEMO_SHOP_CITY;
   assert.match(textOf(last(r)), /Got your 4 Amazon listings.*which city/i);
   const r2 = await say(u, 'Jaipur');
   assert.match(textOf(last(r2)), /Where do you sell today\?/);
@@ -259,7 +264,8 @@ test('M3: "Let me get it done for you" sends 3 different posters + the group mes
   assert.match(textOf(images[0]), /WhatsApp Status tonight, 7 to 10 PM/);
   assert.match(textOf(images[1]), /feed post/);
   assert.match(textOf(images[2]), /Instagram story/);
-  assert.ok(pack.some((x) => x.kind === 'text' && /https:\/\/www\.amazon\.in\/dp\/B0HL64BTHL/.test(x.text)), 'group message carries the link');
+  assert.ok(pack.some((x) => x.kind === 'text' && /http:\/\/test\.local:8787\/r\/\w{6}$/.test(x.text)), 'group message ends with its short link');
+  assert.ok(posters.every((p) => p.html.includes('₹1,299')), 'price from products.json');
   assert.ok(posters.every((p) => p.html.includes('Kashmakash Studios')));
   assert.equal(db().users[u].flow.pack.files.length, 3);
 });
@@ -284,4 +290,94 @@ test('M3: the seller price from their one line is on the posters; an own photo h
   assert.ok(posters.every((p) => p.html.includes('₹650')));
   assert.ok(r.some((x) => /Reply to this message to order\./.test(textOf(x))));
   assert.ok(r.some((x) => /WhatsApp may block it/.test(textOf(x))), 'warning when there was no plan');
+});
+
+
+test('the demo shop is in Pune: the Amazon button goes straight to "Where do you sell today?"', async () => {
+  const u = newUser();
+  await say(u, '/start');
+  const r = await tap(u, 'use_amazon');
+  assert.match(textOf(last(r)), /Got your 4 Amazon listings \(LED wall lights\), Pune\./);
+  assert.equal(db().users[u].profile.city, 'Pune');
+});
+
+// ---- M4: short links and report back --------------------------------------------------------
+
+const PHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1';
+
+async function packFor(u: string) {
+  await onboard(u, ['whatsapp', 'social'], 'never', 'what_to_post');
+  await tap(u, 'pick:golden-bird-sconce');
+  const codes = db().users[u].flow.pack.codes as Record<string, string>;
+  return codes;
+}
+
+test('M4: one short link per format, each redirecting to the product page and logged in db.json', async () => {
+  const { recordClick } = await import('../src/core/links.ts');
+  const u = newUser();
+  const codes = await packFor(u);
+  assert.deepEqual(Object.keys(codes).sort(), ['feed', 'group', 'status', 'story']);
+  assert.equal(new Set(Object.values(codes)).size, 4);
+  const hit = await recordClick(codes.status, { ua: PHONE, ip: '172.20.10.5', method: 'GET' });
+  assert.equal(hit?.target, 'https://www.amazon.in/dp/B0HL64BTHL');
+  assert.equal(hit?.counted, true);
+  const logged = db().clicks.filter((c: { code: string }) => c.code === codes.status);
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0].format, 'status');
+  assert.equal(await recordClick('nope00', { ua: PHONE }), undefined);
+});
+
+test('M4: link previews, HEAD requests and quick repeats are logged but not counted', async () => {
+  const { recordClick } = await import('../src/core/links.ts');
+  const u = newUser();
+  const codes = await packFor(u);
+  assert.equal((await recordClick(codes.group, { ua: 'TelegramBot (like TwitterBot)', method: 'GET' }))?.counted, false);
+  assert.equal((await recordClick(codes.group, { ua: 'WhatsApp/2.24.1 A', method: 'GET' }))?.counted, false);
+  assert.equal((await recordClick(codes.group, { ua: PHONE, ip: '1.1.1.1', method: 'HEAD' }))?.counted, false);
+  assert.equal((await recordClick(codes.group, { ua: PHONE, ip: '1.1.1.1', method: 'GET' }))?.counted, true);
+  assert.equal((await recordClick(codes.group, { ua: PHONE, ip: '1.1.1.1', method: 'GET' }))?.counted, false, 'repeat');
+  assert.equal((await recordClick(codes.group, { ua: PHONE, ip: '1.1.1.2', method: 'GET' }))?.counted, true, 'another phone');
+});
+
+test('M4: /report counts clicks per channel in code and names what worked best', async () => {
+  const { recordClick } = await import('../src/core/links.ts');
+  const u = newUser();
+  const empty = await say(u, '/report');
+  assert.match(textOf(last(empty)), /No posts to report on yet/);
+  const codes = await packFor(u);
+  const none = await say(u, '/report');
+  assert.match(textOf(last(none)), /no clicks yet/);
+  const click = (f: string, i: number) => recordClick(codes[f], { ua: PHONE, ip: `10.0.0.${i}`, method: 'GET' });
+  for (let i = 0; i < 3; i++) await click('status', i);
+  await click('group', 10);
+  await click('feed', 20);
+  await click('story', 21);
+  const r = await say(u, '/report');
+  assert.equal(textOf(last(r)), 'Golden Bird LED Wall Light so far:\nStatus: 3 clicks, groups: 1, Insta: 2. Status worked best, post it again tonight, 7 to 10 PM.');
+});
+
+test('M4: best channel and sentence rules (code decides, model sentence is checked)', async () => {
+  const { best, sentenceIsValid, countsLine } = await import('../src/core/report.ts');
+  assert.equal(best({ status: 2, groups: 2, insta: 1 }), 'status', 'tie goes to the free channel first');
+  assert.equal(best({ status: 0, groups: 1, insta: 4 }), 'insta');
+  assert.equal(best({ status: 0, groups: 0, insta: 0 }), undefined);
+  assert.equal(countsLine({ status: 12, groups: 5, insta: 2 }), 'Status: 12 clicks, groups: 5, Insta: 2.');
+  assert.equal(sentenceIsValid('Status worked best, post it again tonight, 7 to 10 PM.', 'status'), true);
+  assert.equal(sentenceIsValid('Status got 50 clicks, post again.', 'status'), false, 'numbers code did not give');
+  assert.equal(sentenceIsValid('Groups did well, post again tonight.', 'status'), false, 'must name the best channel');
+});
+
+test('M4: after clicks the agent reports back on its own (web: through the inbox)', async () => {
+  const { recordClick } = await import('../src/core/links.ts');
+  const { onCountedClick, takeOutbox } = await import('../src/core/notify.ts');
+  const u = newUser();
+  const codes = await packFor(u);
+  await recordClick(codes.status, { ua: PHONE, ip: '10.1.0.1', method: 'GET' });
+  await recordClick(codes.story, { ua: PHONE, ip: '10.1.0.1', method: 'GET' });
+  onCountedClick(u);
+  await new Promise((r) => setTimeout(r, 200));
+  const out = await takeOutbox(u);
+  assert.equal(out.length, 1);
+  assert.match(textOf(out[0]), /Status: 1 click, groups: 0, Insta: 1\. Status worked best/);
+  assert.deepEqual(await takeOutbox(u), [], 'handed over once');
 });

@@ -28,6 +28,12 @@ Open:
 4. **Prices for the 4 Amazon products**: products.json has none, so their posters have no price chip. Add `"price": 1299` (for example) per product and it appears.
 5. Next tasks: short tracking links (TASKS 8) replace `linkFor()` in `src/creative/pack.ts`; a "Post to Instagram" button can use the existing `src/core/postToInstagramAction.js` with the feed poster (needs `PUBLIC_TUNNEL_URL`).
 
+## M4: tracking and report back (committed, phone pass test NOT passed)
+
+- Short links `/r/:code`, one per format (status, group, feed, story), made with each pack; a click is logged in `db.json` and redirects to the Amazon page. Base: `PUBLIC_BASE_URL` (now the cloudflared tunnel), else the laptop's Wi-Fi address.
+- `/report` and an automatic report about a minute after new clicks (Telegram message / web inbox). Code counts and picks the best channel; Claude writes one sentence (`prompts/report_back.md`), checked in code.
+- Works from the laptop end to end (2 clicks → report → automatic report). From Zoeb's phone: 1 click over the hotspot counted at 15:29 and the automatic Telegram report arrived; taps on the tunnel links after 15:31 never reached the bot (no request logged), while the tunnel itself answers from the laptop. Debugging parked by Zoeb. Every `/r/` hit is now logged in the bot terminal, so the next try shows what arrives.
+
 ## How to run
 
 ```bash

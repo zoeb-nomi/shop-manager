@@ -1,8 +1,9 @@
 // Telegram adapter (@Shopma_bot): grammy, long polling, so no public URL is needed.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { Bot, GrammyError, InlineKeyboard, InputFile, type Context } from 'grammy';
+import { Api, Bot, GrammyError, InlineKeyboard, InputFile, type Context } from 'grammy';
 import { handle, type Inbound, type Reply } from '../core/handle.ts';
+import { registerNotifier } from '../core/notify.ts';
 
 const UPLOADS = 'data/uploads';
 
@@ -12,11 +13,23 @@ function keyboard(buttons: { id: string; label: string }[]): InlineKeyboard {
   return kb;
 }
 
+// No link previews: Telegram's preview fetch would also look like a click on the tracking links.
+const NO_PREVIEW = { link_preview_options: { is_disabled: true } };
+
+// The agent messaging first (automatic report back). In a private chat the chat id is the user id.
+async function push(api: Api, chatId: string, replies: Reply[]): Promise<void> {
+  for (const r of replies) {
+    if (r.kind === 'text') await api.sendMessage(chatId, r.text, NO_PREVIEW);
+    else if (r.kind === 'buttons') await api.sendMessage(chatId, r.text, { reply_markup: keyboard(r.buttons), ...NO_PREVIEW });
+    else await api.sendPhoto(chatId, /^https?:\/\//.test(r.path) ? r.path : new InputFile(r.path), r.caption ? { caption: r.caption } : {});
+  }
+}
+
 // fromButton: the update was a button tap, so a reply marked `edit` updates that message in place.
 async function send(ctx: Context, replies: Reply[], fromButton = false): Promise<void> {
   for (const r of replies) {
     if (r.kind === 'text') {
-      await ctx.reply(r.text);
+      await ctx.reply(r.text, NO_PREVIEW);
     } else if (r.kind === 'buttons') {
       if (r.edit && fromButton) {
         try {
@@ -26,7 +39,7 @@ async function send(ctx: Context, replies: Reply[], fromButton = false): Promise
           if (!(err instanceof GrammyError && /not modified/i.test(err.description))) throw err;
         }
       } else {
-        await ctx.reply(r.text, { reply_markup: keyboard(r.buttons) });
+        await ctx.reply(r.text, { reply_markup: keyboard(r.buttons), ...NO_PREVIEW });
       }
     } else {
       const photo = /^https?:\/\//.test(r.path) ? r.path : new InputFile(r.path);
@@ -44,6 +57,7 @@ async function run(ctx: Context, msg: Inbound, fromButton = false): Promise<void
 export function startTelegram(token: string): Bot {
   const bot = new Bot(token);
   mkdirSync(UPLOADS, { recursive: true });
+  registerNotifier('telegram', (userId, replies) => push(bot.api, userId, replies));
 
   bot.on('message:text', (ctx) => run(ctx, { userId: String(ctx.from.id), surface: 'telegram', text: ctx.message.text }));
 

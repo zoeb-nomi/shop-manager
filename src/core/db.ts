@@ -2,7 +2,7 @@
 // Writes go through one queue and land via temp file + rename, so two messages at once never corrupt the file.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import type { Surface } from './types.ts';
+import type { Reply, Surface } from './types.ts';
 
 // Answers to the opening questions (PAINS.md). Codes drive the plan; `answers` keeps the words the owner saw.
 export type SellsOn = 'shop' | 'whatsapp' | 'marketplace' | 'social';
@@ -44,7 +44,7 @@ export type Flow = {
   plan?: { text: string; steps: unknown[]; source: 'model' | 'fallback' | 'code'; createdAt: string };
   noAdsNoticeShown?: boolean;
   packRequestedAt?: string;
-  pack?: { files: string[]; copySource: 'model' | 'fallback'; createdAt: string };
+  pack?: { files: string[]; copySource: 'model' | 'fallback'; createdAt: string; slug?: string; codes?: Partial<Record<LinkFormat, string>> };
 };
 
 export type User = {
@@ -54,12 +54,19 @@ export type User = {
   lastSeen: string;
   profile: ShopProfile;
   flow?: Flow;
+  outbox?: Reply[]; // messages the agent sends first (web chat picks them up by polling)
+  lastAutoReportAt?: string;
 };
 
-export type Db = { users: Record<string, User>; clicks: unknown[] };
+// One short link per format of a pack (SPEC Flow 6).
+export type LinkFormat = 'status' | 'feed' | 'story' | 'group';
+export type Link = { code: string; userId: string; slug: string; format: LinkFormat; target: string; createdAt: string };
+export type Click = { code: string; userId: string; format: LinkFormat; at: string; ua?: string; ip?: string; counted: boolean; why?: string };
+
+export type Db = { users: Record<string, User>; links: Record<string, Link>; clicks: Click[] };
 
 const DB_PATH = process.env.DB_PATH ?? 'data/db.json';
-const empty = (): Db => ({ users: {}, clicks: [] });
+const empty = (): Db => ({ users: {}, links: {}, clicks: [] });
 
 export function readDb(): Db {
   try {

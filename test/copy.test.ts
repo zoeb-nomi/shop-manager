@@ -9,13 +9,13 @@ const { loadProducts } = await import('../src/core/products.ts');
 const { bestFit } = await import('../src/core/festivals.ts');
 
 const good = (over: Record<string, unknown> = {}) => ({
-  headline_en: 'Golden bird, warm glow',
+  headline_en: 'A warm glow for your walls',
   benefit_en: 'A decorative wall light that makes any room feel festive',
-  headline_hi: 'घर में सुनहरी रोशनी',
+  headline_hi: 'घर में नई रोशनी',
   festival_badge: 'Christmas gift',
-  status_line: 'A golden glow for Christmas',
+  status_line: 'A warm glow for the season',
   story_cta: 'Tap to order',
-  forward_text_hi_en: `Namaste! Golden Bird light ab available hai. Order ke liye: ${LINK_TOKEN}`,
+  forward_text_hi_en: `Namaste! Ye wall light ab available hai. Order ke liye: ${LINK_TOKEN}`,
   hashtags: ['#walllight', 'homedecor'],
   ...over,
 });
@@ -65,4 +65,16 @@ test('broken JSON twice → code wording; lengths are clipped', async () => {
   );
   assert.equal(long.copy.headline_en.split(' ').length, 6);
   assert.equal(long.copy.headline_hi, '', 'non-Devanagari Hindi headline is dropped');
+});
+
+
+test('material and quality words not in the title are refused (Zoeb, 22 Nov)', async () => {
+  const { problem } = await import('../src/creative/copy.ts');
+  const brass = { title: 'Brass lamp', price: 650 };
+  assert.match(problem(good({ benefit_en: 'Solid brass lamp with a warm glow', festival_badge: '' }), brass) ?? '', /solid/i);
+  assert.equal(problem(good({ benefit_en: 'Brass lamp with a warm glow', headline_hi: 'पीतल का दीया', festival_badge: '' }), brass), undefined);
+  assert.match(problem(good({ benefit_en: 'Premium wall lamp', festival_badge: '' }), { title: 'Black Metal Cage Wall Lamp' }) ?? '', /premium/i);
+  assert.match(problem(good({ headline_hi: 'सुनहरी रोशनी', festival_badge: '' }), { title: 'Black Metal Cage Wall Lamp' }) ?? '', /सुनहर/);
+  const bird = { title: 'Golden Bird LED Wall Light, Modern Decorative Sconce', timing: undefined };
+  assert.equal(problem(good({ festival_badge: '' }), bird), undefined, 'golden is in that title');
 });
