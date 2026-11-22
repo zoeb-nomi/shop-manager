@@ -427,3 +427,19 @@ test('fix: /report counts clicks across all of the owner\'s packs', async () => 
   const r = await say(u, '/report');
   assert.match(textOf(last(r)), /Status: 1 click, groups: 0, Insta: 1\./);
 });
+
+test('fix: a crash in the demo path becomes one friendly line, never a raw error', async () => {
+  const { useRenderer } = await import('../src/creative/render.ts');
+  const u = newUser();
+  await onboard(u, ['whatsapp'], 'never', 'photos_bad');
+  await tap(u, 'pick:golden-bird-sconce');
+  useRenderer(async () => { throw new Error('ECONNRESET at chrome.launch /Users/x/y'); });
+  const r = await tap(u, 'do_it_for_me');
+  useRenderer(async (html, size, file) => { rendered.push({ html, file, size }); return `data/creatives/${file}`; });
+  assert.doesNotMatch(JSON.stringify(r), /ECONNRESET|Error|\/Users\//);
+  assert.match(textOf(last(r)), /Tap to try again/);
+  // A broken db entry (a user with no stored row) still gets a reply.
+  const bad = await handle({ userId: 'ghost', surface: 'web', button: 'swap:nope' });
+  assert.equal(bad.length >= 1, true);
+  assert.doesNotMatch(JSON.stringify(bad), /TypeError|undefined/);
+});

@@ -2,7 +2,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { Api, Bot, GrammyError, InlineKeyboard, InputFile, type Context } from 'grammy';
-import { handle, type Inbound, type Reply } from '../core/handle.ts';
+import { handle, OOPS, type Inbound, type Reply } from '../core/handle.ts';
 import { registerNotifier } from '../core/notify.ts';
 import { transcribe } from './sarvam.ts';
 
@@ -55,7 +55,13 @@ async function send(ctx: Context, replies: Reply[], fromButton = false): Promise
 async function run(ctx: Context, msg: Inbound, fromButton = false): Promise<void> {
   // The coaching plan can take a few seconds (model call): show "typing…" meanwhile.
   await ctx.replyWithChatAction('typing').catch(() => undefined);
-  await send(ctx, await handle(msg), fromButton);
+  try {
+    await send(ctx, await handle(msg), fromButton);
+  } catch (err) {
+    // A message Telegram refused (a picture it could not fetch, a too-long caption): say so plainly.
+    console.error('[telegram] send failed:', err);
+    await ctx.reply(OOPS).catch(() => undefined);
+  }
 }
 
 export function startTelegram(token: string): Bot {
@@ -105,7 +111,11 @@ export function startTelegram(token: string): Bot {
     await run(ctx, { userId: String(ctx.from.id), surface: 'telegram', button: ctx.callbackQuery.data }, true);
   });
 
-  bot.catch((err) => console.error('[telegram] handler error:', err.error));
+  // Anything a handler still throws (a photo or voice download, say): log it and tell the owner in one line.
+  bot.catch(async (err) => {
+    console.error('[telegram] handler error:', err.error);
+    await err.ctx.reply(OOPS).catch(() => undefined);
+  });
 
   // bot.start() resolves only when the bot stops, so it is not awaited.
   void bot.start({
