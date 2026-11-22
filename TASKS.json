@@ -10,6 +10,6 @@
  {"id":9,"task":"Report back: /report message with clicks per format and one next-step tip; 'Simulate 1 day' demo button adds a batch labelled simulated","accept":"/report names the best channel from real counts","status":"failing"},
  {"id":10,"task":"Festival nudge: /nudge makes the agent message first with a ready-pack button","accept":"DEMO_DATE=2026-11-22: 'Christmas is in 33 days'","status":"failing"},
  {"id":11,"task":"Web chat fallback /chat on the same handle()","accept":"Same flow works in a browser with Telegram stopped","status":"failing"},
- {"id":12,"task":"README: positioning line, how to run, Prepared before the event","accept":"README lists every prepared file","status":"failing"},
+ {"id":12,"task":"README: positioning line, how to run, Prepared before the event","accept":"README lists every prepared file","status":"passing"},
  {"id":13,"task":"PAINS golden tests: Q3 'Tried, got no orders' → 0 paid spend, no boost line; Q4 'Don't know what to post' → next reply is the pack, not coaching; 'samajh nahi aaya' → one step + 'Do it for me' button","accept":"npm test passes (test/flow.test.ts)","status":"passing"}
 ]
