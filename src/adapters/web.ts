@@ -6,6 +6,8 @@ import { Hono } from 'hono';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { handle, type Reply } from '../core/handle.ts';
 import { recordClick } from '../core/links.ts';
+import { readDb } from '../core/db.ts';
+import { journeyOf } from '../core/flow.ts';
 import { onCountedClick, takeOutbox } from '../core/notify.ts';
 import { CHAT_HTML } from './chat-page.ts';
 
@@ -52,7 +54,8 @@ export function webApp(): Hono {
     if (!text && !button && !photoPath) return c.json({ error: 'text, button or photo required' }, 400);
 
     const replies = await handle({ userId: `web:${userId}`, surface: 'web', text, button, photoPath });
-    return c.json({ replies: forWeb(replies) });
+    // `journey` tells the page which of the four steps the owner is on.
+    return c.json({ replies: forWeb(replies), journey: journeyOf(readDb().users[`web:${userId}`]) });
   });
 
   // Messages the agent sends first (automatic report back); the chat page polls this.

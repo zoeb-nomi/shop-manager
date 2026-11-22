@@ -164,6 +164,15 @@ function productFromListing(slug: string): PickedProduct | undefined {
   return p && { slug: p.slug, title: p.title, source: 'amazon', asin: p.asin, image: p.image, ...(p.price ? { price: p.price } : {}) };
 }
 
+// Where the owner is in the journey, for surfaces that show progress (the web chat's step strip).
+export function journeyOf(u?: User): { stage: 1 | 2 | 3 | 4; question?: number } {
+  const s = u?.flow?.step ?? 'q1';
+  if (s === 'q1' || s === 'q1_city') return { stage: 1, question: 1 };
+  if (s === 'q2' || s === 'q3' || s === 'q4') return { stage: 1, question: Number(s[1]) };
+  if (s === 'pick' || s === 'photo_line' || s === 'suggest') return { stage: 2 };
+  return { stage: s === 'plan' ? 3 : 4 };
+}
+
 // ---- skipping what is already known (M5) -------------------------------------------------------
 
 type NextStep = 'q1' | 'q1_city' | 'q2' | 'q3' | 'q4' | 'pick' | 'done';
@@ -520,10 +529,21 @@ function planOrPack(u: User, lead: Reply[]): Outcome {
 function doItForMe(u: User): Outcome {
   const p = u.profile;
   const flow = u.flow!;
+  let demoShop = false;
   if (flow.step === 'q1' || flow.step === 'q1_city') {
-    if (!p.sells) Object.assign(p, DEMO_SHOP, { productSource: 'amazon' });
-    flow.step = 'q1_city';
-    return { replies: [{ kind: 'text', text: `I need just one thing from you. ${Q1_CITY}` }] };
+    // Skipping before saying what they sell: use the demo shop (it has a home city). A shop that did say what it
+    // sells is still asked for its city, the one thing code cannot fill in.
+    if (!p.sells) {
+      Object.assign(p, DEMO_SHOP, { productSource: 'amazon' });
+      p.city ??= demoShopCity();
+      demoShop = true;
+    }
+    if (!p.city) {
+      flow.step = 'q1_city';
+      return { replies: [{ kind: 'text', text: `I need just one thing from you. ${Q1_CITY}` }] };
+    }
+    p.answers = { ...p.answers, q1: p.answers?.q1 ?? `${p.sells}, ${p.city}` };
+    flow.step = 'q2';
   }
   if (flow.step === 'q2' || flow.step === 'q3' || flow.step === 'q4') {
     p.sellsOn ??= flow.q2Draft?.length ? [...flow.q2Draft] : ['whatsapp'];
@@ -533,7 +553,8 @@ function doItForMe(u: User): Outcome {
     p.answeredAt = new Date().toISOString();
     delete flow.q2Draft;
     flow.step = 'pick';
-    return { replies: [pickReply(p, 'Done: free channels first, no ads, I make the posts.\n\n')] };
+    const who = demoShop ? `I set up a demo shop for you: ${p.shopName}, ${p.sells}, ${p.city}. ` : 'Done: ';
+    return { replies: [pickReply(p, `${who}${demoShop ? 'Free' : 'free'} channels first, no ads, I make the posts.\n\n`)] };
   }
   if (!p.product && p.productSource !== 'amazon') {
     flow.step = 'pick';

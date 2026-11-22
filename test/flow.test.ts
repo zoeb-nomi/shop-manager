@@ -447,3 +447,30 @@ test('fix: a crash in the demo path becomes one friendly line, never a raw error
   assert.equal(bad.length >= 1, true);
   assert.doesNotMatch(JSON.stringify(bad), /TypeError|undefined/);
 });
+
+test('skip: "Do it for me" at the very first question sets up the demo shop and lands on the product pick', async () => {
+  const { journeyOf } = await import('../src/core/flow.ts');
+  const u = newUser();
+  await say(u, '/start');
+  assert.deepEqual(journeyOf(db().users[u]), { stage: 1, question: 1 });
+  const r = await tap(u, 'do_it_for_me');
+  assert.match(textOf(last(r)), /I set up a demo shop for you: Kashmakash Studios, LED wall lights, Pune\. Free channels first/);
+  assert.equal(ids(last(r))[1], 'pick:golden-bird-sconce');
+  const p = db().users[u].profile;
+  assert.deepEqual([p.city, p.sellsOn, p.adsBefore, p.postingBlocker, p.defaultsUsed], ['Pune', ['whatsapp'], 'never', 'no_time', true]);
+  assert.deepEqual(journeyOf(db().users[u]), { stage: 2 });
+  await tap(u, 'pick:golden-bird-sconce');
+  assert.deepEqual(journeyOf(db().users[u]), { stage: 3 });
+  await tap(u, 'do_it_for_me');
+  assert.deepEqual(journeyOf(db().users[u]), { stage: 4 });
+});
+
+test('skip: a shop that said what it sells is still asked for its city, then gets its own pick', async () => {
+  const u = newUser();
+  await say(u, '/start');
+  await say(u, 'sarees');
+  const r = await tap(u, 'do_it_for_me');
+  assert.match(textOf(last(r)), /which city/i);
+  const r2 = await say(u, 'Surat');
+  assert.match(textOf(last(r2)), /Where do you sell today\?/);
+});

@@ -69,6 +69,14 @@ Walked both paths on the live bot through /chat (seeded Kashmakash shop; a new s
 
 Not walked live: tapping "Post to Instagram" (the bot is in live mode; it would post for real), and Telegram itself (same handler as /chat; `/nudge` voice note not yet seen on a phone).
 
+## /chat page: intro, journey strip, WhatsApp look (22 Nov, ~17:00)
+
+- First visit shows three intro cards (what this is; the four steps; "tap, type, or talk", with voice on Telegram and a link to @Shopma_bot). Skip is on every card; the "?" in the header reopens it. Seen-state is per browser (`localStorage`).
+- A four-step strip under the banner (Your shop → Pick a piece → Get posts → Post & track) with one line on what to do now. It follows the `journey` field that `/api/chat` now returns (`journeyOf` in `src/core/flow.ts`).
+- "Skip the questions" on step 1 sends the existing "Do it for me": with nothing said yet it sets up the demo shop (Kashmakash Studios, Pune) with free-first defaults and goes to the product pick; a shop that already said what it sells is still asked for its city.
+- Look: bubble tails, times, read ticks, "typing…" with dots while the bot works, day chip, rounded composer. The mic (empty field) says voice notes work on Telegram instead of recording. A long reply (the posts) starts at its first message.
+- The static "Try it:" line was replaced by the step line.
+
 ## How to run
 
 ```bash
