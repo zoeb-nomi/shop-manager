@@ -5,7 +5,8 @@ import { readDb, updateDb } from './db.ts';
 import { buildReport } from './report.ts';
 import type { Button, Inbound, Reply } from './types.ts';
 import { DEMO_SHOP, demoShopCity, loadProducts, parsePrice, productBySlug, shortTitle } from './products.ts';
-import { judgePick, phrase, rankTitles, bestFit, headline, type FestivalTiming } from './festivals.ts';
+import { judgePick, phrase, rankTitles, bestFit, headline, FESTIVAL_HI, type FestivalTiming } from './festivals.ts';
+import { voiceNote } from './voiceNote.ts';
 import { coachingPlan, DO_IT_BUTTON, PHOTO_LINE, STATUS_HINT, WHATSAPP_WARNING } from './coaching.ts';
 import { makePack } from '../creative/pack.ts';
 import { handlePostToInstagram } from './postToInstagramAction.js';
@@ -224,7 +225,8 @@ function applyFields(u: User, f: Fields, msg: Inbound, text: string): Outcome {
   const out = goNext(u);
   // The model's follow-up, in the owner's language, replaces the English question text when it asks for the same thing.
   const ask = f.followUp && FIELD_STEP[f.followUp.field] === next ? f.followUp.text : undefined;
-  if (ask && out.replies[0] && out.replies[0].kind !== 'image') out.replies[0] = { ...out.replies[0], text: ask };
+  const firstReply = out.replies[0];
+  if (ask && firstReply && (firstReply.kind === 'text' || firstReply.kind === 'buttons')) out.replies[0] = { ...firstReply, text: ask };
   return out;
 }
 
@@ -432,6 +434,39 @@ function nudge(u: User): Reply[] {
   return [pickReply(u.profile, lead)];
 }
 
+// /nudge: the agent opens the conversation with the festival nudge as text AND as a short Hindi voice note
+// saying the same thing, then the product buttons. Festival, days and the piece come from code.
+export function nudgeLines(u: User): { text: string; hindi: string } | undefined {
+  const head = headline();
+  if (!head) return undefined;
+  const listings = loadProducts();
+  const top = shortTitle(listings[rankTitles(listings.map((x) => x.title))[0]].title);
+  const shop = u.profile.shopName ? ` ${u.profile.shopName}` : '';
+  const fest = FESTIVAL_HI[head.festival.id] ?? head.festival.name;
+  const when = head.active ? `${fest} चल रहा है` : head.days === 0 ? `आज ${fest} है` : `${fest} में ${head.days} दिन बाकी हैं`;
+  return {
+    text: `Namaste${shop}! ${phrase(head)}. Your ${top} makes a good gift; I can make its posts now.`,
+    hindi: `नमस्ते${shop}! ${when}। आपकी ${top} एक अच्छा गिफ़्ट है। मैं अभी इसकी पोस्ट बना सकता हूँ।`,
+  };
+}
+
+async function nudgeReplies(userId: string): Promise<Reply[]> {
+  const before = readDb().users[userId];
+  const lines = nudgeLines(before);
+  const voice = lines ? await voiceNote(lines.hindi) : undefined;
+  console.log(`[nudge] ${userId}: voice ${voice ? (voice.ogg ? 'note (ogg)' : 'file (wav)') : 'none, text only'}`);
+  return updateDb((db) => {
+    const u = db.users[userId];
+    const flow = (u.flow ??= { step: 'q1' });
+    // An onboarded shop goes (back) to the product pick; anyone else continues where they were.
+    if (u.profile.answeredAt) flow.step = 'pick';
+    const out: Reply[] = [];
+    if (lines) out.push({ kind: 'text', text: lines.text });
+    if (voice) out.push({ kind: 'voice', path: voice.ogg ?? voice.wav, webPath: voice.wav });
+    return [...out, ...(u.profile.answeredAt ? [pickReply({ ...u.profile, productSource: 'amazon' })] : promptFor(u))];
+  });
+}
+
 function ownPhoto(photoPath: string, line: string): PickedProduct {
   const price = parsePrice(line);
   return { slug: `photo-${Date.now().toString(36)}`, title: line.trim().slice(0, 140), source: 'photo', photoPath, ...(price ? { price } : {}) };
@@ -559,7 +594,7 @@ export async function runFlow(msg: Inbound): Promise<Reply[]> {
     const pack = readDb().users[msg.userId]?.flow?.pack;
     if (!pack?.feedPoster || !pack.igCaption) return [{ kind: 'text', text: 'Make the posts first, then I can put the feed post on Instagram.' }];
     const replies = await handlePostToInstagram({ posterPath: pack.feedPoster, caption: pack.igCaption });
-    const result = replies.map((r) => (r.kind === 'image' ? r.caption ?? '' : r.text)).join(' ').slice(0, 300);
+    const result = replies.map((r) => (r.kind === 'image' ? r.caption ?? '' : r.kind === 'voice' ? '' : r.text)).join(' ').slice(0, 300);
     console.log(`[instagram] ${msg.userId}: ${result.split('\n')[0]}`);
     await updateDb((db) => {
       const p = db.users[msg.userId]?.flow?.pack;
@@ -567,6 +602,7 @@ export async function runFlow(msg: Inbound): Promise<Reply[]> {
     });
     return replies;
   }
+  if (isCommand(text, 'nudge')) return nudgeReplies(msg.userId);
   if (isCommand(text, 'report')) {
     const u = readDb().users[msg.userId];
     const report = await buildReport(u);

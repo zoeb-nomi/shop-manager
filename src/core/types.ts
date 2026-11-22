@@ -17,4 +17,6 @@ export type Button = { id: string; label: string };
 export type Reply =
   | { kind: 'text'; text: string }
   | { kind: 'image'; path: string; caption?: string }
+  // A spoken message: `path` is what Telegram sends (OGG/Opus voice note), `webPath` what the browser plays (WAV).
+  | { kind: 'voice'; path: string; webPath?: string }
   | { kind: 'buttons'; text: string; buttons: Button[]; edit?: boolean };

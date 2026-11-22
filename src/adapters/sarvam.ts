@@ -23,3 +23,26 @@ export async function transcribe(file: string): Promise<{ text: string; language
   const text = data.transcript?.trim();
   return text ? { text, language: data.language_code } : undefined;
 }
+
+// Text-to-speech (Sarvam bulbul): returns WAV bytes for a short line, or undefined so the caller sends text only.
+export async function speak(text: string, language = 'hi-IN'): Promise<Buffer | undefined> {
+  const key = process.env.SARVAM_API_KEY;
+  if (!key) return undefined;
+  const res = await fetch('https://api.sarvam.ai/text-to-speech', {
+    method: 'POST',
+    headers: { 'api-subscription-key': key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: text.slice(0, 1400),
+      target_language_code: language,
+      model: process.env.SARVAM_TTS_MODEL ?? 'bulbul:v3',
+      ...(process.env.SARVAM_TTS_SPEAKER ? { speaker: process.env.SARVAM_TTS_SPEAKER } : {}),
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const data = (await res.json().catch(() => ({}))) as { audios?: string[]; error?: unknown };
+  if (!res.ok || !data.audios?.[0]) {
+    console.error(`[voice] Sarvam text-to-speech ${res.status}:`, JSON.stringify(data).slice(0, 300));
+    return undefined;
+  }
+  return Buffer.from(data.audios[0], 'base64');
+}

@@ -8,6 +8,7 @@ import path from 'node:path';
 
 const dir = mkdtempSync(path.join(tmpdir(), 'shop-flow-'));
 process.env.DB_PATH = path.join(dir, 'db.json');
+process.env.VOICE_DIR = dir; // voice files made in tests stay out of data/
 process.env.DEMO_DATE = '2026-11-22';
 process.env.COACH_LLM = 'off';
 process.env.PUBLIC_BASE_URL = 'http://test.local:8787';
@@ -381,4 +382,24 @@ test('M4: after clicks the agent reports back on its own (web: through the inbox
   assert.equal(out.length, 1);
   assert.match(textOf(out[0]), /Status: 1 click, groups: 0, Insta: 1\. Status worked best/);
   assert.deepEqual(await takeOutbox(u), [], 'handed over once');
+});
+
+test('/nudge: festival nudge as text AND a Hindi voice note saying the same, then the product buttons', async () => {
+  const { useSpeaker } = await import('../src/core/voiceNote.ts');
+  const u = newUser();
+  await onboard(u, ['whatsapp'], 'never', 'no_time');
+  await tap(u, 'pick:golden-bird-sconce'); // now at the plan; /nudge must bring the pick back
+  let spoken = '';
+  useSpeaker(async (text, lang) => { spoken = `${lang}|${text}`; return Buffer.from('RIFFfake'); });
+  const r = await say(u, '/nudge');
+  useSpeaker(undefined);
+  assert.deepEqual(r.map((x) => x.kind), ['text', 'voice', 'buttons']);
+  assert.match(textOf(r[0]), /Christmas is in 33 days\. Your Golden Bird LED Wall Light makes a good gift/);
+  assert.match(spoken, /^hi-IN\|नमस्ते! क्रिसमस में 33 दिन बाकी हैं। आपकी Golden Bird LED Wall Light एक अच्छा गिफ़्ट है।/);
+  assert.ok(r[1].kind === 'voice' && /voice-\w+\.(ogg|wav)$/.test(r[1].path));
+  assert.deepEqual(ids(r[2]).slice(0, 4).map((i) => i.split(':')[0]), ['pick', 'pick', 'pick', 'pick']);
+  assert.equal(db().users[u].flow.step, 'pick');
+  // No voice available (no key, provider down): the text and buttons still go out.
+  const r2 = await say(u, '/nudge');
+  assert.deepEqual(r2.map((x) => x.kind), ['text', 'buttons']);
 });

@@ -6,6 +6,8 @@ import { webApp } from './adapters/web.ts';
 import { startTelegram } from './adapters/telegram.ts';
 import { closeRenderer, warmRenderer } from './creative/render.ts';
 import { baseUrl } from './core/links.ts';
+import { useSpeaker } from './core/voiceNote.ts';
+import { speak } from './adapters/sarvam.ts';
 
 const port = Number(process.env.PORT ?? 8787);
 mkdirSync('data/creatives', { recursive: true });
@@ -16,6 +18,7 @@ serve({ fetch: webApp().fetch, port }, (info) => {
 });
 
 if (process.env.RENDER_WARM !== 'off') warmRenderer();
+useSpeaker(speak); // spoken nudges (Sarvam text-to-speech)
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const bot = token ? startTelegram(token) : undefined;

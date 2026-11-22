@@ -61,6 +61,12 @@ export const CHAT_HTML = /* html */ `<!doctype html>
   function render(r, target) {
     const d = target || bubble('bot');
     d.textContent = '';
+    if (r.kind === 'voice') {
+      const a = document.createElement('audio');
+      a.controls = true; a.src = r.path; a.style.maxWidth = '100%';
+      d.appendChild(a);
+      return;
+    }
     if (r.kind === 'image') {
       const img = document.createElement('img');
       img.src = r.path; img.alt = r.caption || 'product photo';

@@ -20,6 +20,15 @@ export const FESTIVALS: Festival[] = [
   { id: 'wedding', name: 'wedding season', season: { from: [11, 1], to: [2, 28] }, keywords: ['gate', 'entrance', 'pooja', 'gold', 'outdoor', 'gift'], why: 'homes are lit up for guests and families buy gifts' },
 ];
 
+// Hindi names for the spoken nudge.
+export const FESTIVAL_HI: Record<string, string> = {
+  christmas: 'क्रिसमस',
+  new_year: 'नया साल',
+  lohri: 'लोहड़ी',
+  republic_day: 'गणतंत्र दिवस सेल',
+  wedding: 'शादी का सीज़न',
+};
+
 const DAY = 86_400_000;
 
 export function today(): number {

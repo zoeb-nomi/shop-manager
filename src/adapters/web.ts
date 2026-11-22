@@ -15,9 +15,10 @@ const PHOTO_TYPES: Record<string, string> = { 'image/jpeg': '.jpg', 'image/png':
 
 // Image replies carry a file path or a URL; local files reach the browser through /c/<file> (data/creatives/).
 function forWeb(replies: Reply[]): Reply[] {
-  return replies.map((r) =>
-    r.kind === 'image' && !/^https?:\/\//.test(r.path) ? { ...r, path: `/c/${encodeURIComponent(path.basename(r.path))}` } : r,
-  );
+  return replies.map((r) => {
+    if (r.kind === 'voice') return { kind: 'voice', path: `/c/${encodeURIComponent(path.basename(r.webPath ?? r.path))}` };
+    return r.kind === 'image' && !/^https?:\/\//.test(r.path) ? { ...r, path: `/c/${encodeURIComponent(path.basename(r.path))}` } : r;
+  });
 }
 
 // The page sends a photo as a data: URL. Save it like the Telegram adapter does.
@@ -75,7 +76,18 @@ export function webApp(): Hono {
     return c.redirect(hit.target, 302);
   });
 
-  app.use('/c/*', serveStatic({ root: './data/creatives', rewriteRequestPath: (p) => p.replace(/^\/c/, '') }));
+  app.use(
+    '/c/*',
+    serveStatic({
+      root: './data/creatives',
+      rewriteRequestPath: (p) => p.replace(/^\/c/, ''),
+      // Voice notes: phone browsers only play audio served with an audio type.
+      onFound: (file, c) => {
+        if (file.endsWith('.wav')) c.header('Content-Type', 'audio/wav');
+        else if (file.endsWith('.ogg')) c.header('Content-Type', 'audio/ogg');
+      },
+    }),
+  );
 
   return app;
 }

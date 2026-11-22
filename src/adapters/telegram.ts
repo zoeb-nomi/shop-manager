@@ -22,6 +22,7 @@ async function push(api: Api, chatId: string, replies: Reply[]): Promise<void> {
   for (const r of replies) {
     if (r.kind === 'text') await api.sendMessage(chatId, r.text, NO_PREVIEW);
     else if (r.kind === 'buttons') await api.sendMessage(chatId, r.text, { reply_markup: keyboard(r.buttons), ...NO_PREVIEW });
+    else if (r.kind === 'voice') await api.sendVoice(chatId, new InputFile(r.path));
     else await api.sendPhoto(chatId, /^https?:\/\//.test(r.path) ? r.path : new InputFile(r.path), r.caption ? { caption: r.caption } : {});
   }
 }
@@ -42,6 +43,8 @@ async function send(ctx: Context, replies: Reply[], fromButton = false): Promise
       } else {
         await ctx.reply(r.text, { reply_markup: keyboard(r.buttons), ...NO_PREVIEW });
       }
+    } else if (r.kind === 'voice') {
+      await ctx.replyWithVoice(new InputFile(r.path));
     } else {
       const photo = /^https?:\/\//.test(r.path) ? r.path : new InputFile(r.path);
       await ctx.replyWithPhoto(photo, r.caption ? { caption: r.caption } : {});
